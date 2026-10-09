@@ -1,6 +1,9 @@
 from helpers.data import (
     get_artist_map,
+    get_artists_view,
+    get_festival_metadata,
     get_venue_map,
+    get_venues_view,
     load_festival,
     save_festival,
 )
@@ -19,6 +22,9 @@ __all__ = [
     "save_festival",
     "get_venue_map",
     "get_artist_map",
+    "get_festival_metadata",
+    "get_venues_view",
+    "get_artists_view",
     "format_summary",
     "format_venues",
     "format_programme",

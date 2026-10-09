@@ -1,4 +1,5 @@
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 from config import DEFAULT_DATA_PATH
@@ -27,3 +28,52 @@ def get_venue_map(festival: dict) -> dict[str, str]:
 
 def get_artist_map(festival: dict) -> dict[str, str]:
     return {slugify(artist["name"]): artist["name"] for artist in festival["artists"]}
+
+
+# --- API Query Extractors ---
+
+
+def get_festival_metadata(festival: dict) -> dict:
+    """Return festival details including the complete array of ISO dates."""
+    first_dt = date.fromisoformat(festival["first_day"])
+    last_dt = date.fromisoformat(festival["last_day"])
+
+    days: list[str] = []
+    current = first_dt
+    while current <= last_dt:
+        days.append(current.isoformat())
+        current += timedelta(days=1)
+
+    return {
+        "name": festival["name"],
+        "first_day": festival["first_day"],
+        "last_day": festival["last_day"],
+        "days": days,
+    }
+
+
+def get_venues_view(festival: dict) -> list[dict]:
+    """Return venues with their computed slugs in original file order."""
+    return [
+        {
+            "slug": slugify(v["name"]),
+            "name": v["name"],
+            "capacity": v["capacity"],
+            "address": v["address"],
+        }
+        for v in festival["venues"]
+    ]
+
+
+def get_artists_view(festival: dict) -> list[dict]:
+    """Return all artists sorted alphabetically by their slug."""
+    artists = [
+        {
+            "slug": slugify(a["name"]),
+            "name": a["name"],
+            "bio": a.get("bio", ""),
+            "photo_url": a.get("photo_url", ""),
+        }
+        for a in festival["artists"]
+    ]
+    return sorted(artists, key=lambda a: a["slug"])

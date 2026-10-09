@@ -1,4 +1,5 @@
 from config.constants import (
+    API_TITLE,
     BUFFER_GAP,
     BUFFER_MINUTES,
     DATE_FORMAT,
@@ -9,12 +10,14 @@ from config.constants import (
     MAX_UPCOMING_PREVIEWS,
     MIN_DURATION_MINUTES,
     PERFORMANCE_ID_FORMAT,
+    STATIC_DIR,
     TIME_FORMAT,
 )
 from config.enums import ArtistRole, PerformanceKind
 
 __all__ = [
     "DEFAULT_DATA_PATH",
+    "STATIC_DIR",
     "FESTIVAL_DAY_CUTOFF_HOURS",
     "FESTIVAL_DAY_OFFSET",
     "BUFFER_MINUTES",
@@ -25,6 +28,7 @@ __all__ = [
     "DATE_FORMAT",
     "TIME_FORMAT",
     "PERFORMANCE_ID_FORMAT",
+    "API_TITLE",
     "PerformanceKind",
     "ArtistRole",
 ]
