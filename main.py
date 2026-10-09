@@ -2,6 +2,7 @@ import sys
 
 from helpers import (
     format_artist_schedule,
+    format_now,
     format_programme,
     format_summary,
     format_usage,
@@ -22,6 +23,8 @@ def main() -> None:
         print(format_programme(festival, args[1]))
     elif args[0] == "artist" and len(args) == 2:
         print(format_artist_schedule(festival, args[1]))
+    elif args[0] == "now" and len(args) == 2:
+        print(format_now(festival, args[1]))
     else:
         print(format_usage())
 

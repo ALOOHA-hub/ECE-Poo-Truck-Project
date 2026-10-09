@@ -1,9 +1,17 @@
+from datetime import datetime
+
 from helpers.data import get_venue_map
 from helpers.slug import slugify
+from helpers.time import (
+    parse_date,
+    parse_datetime,
+    performance_end,
+    performance_festival_day,
+    performance_start,
+)
 
 
 def format_summary(festival: dict) -> str:
-    """Return the step 00 festival overview."""
     name = festival["name"]
     first = festival["first_day"]
     last = festival["last_day"]
@@ -18,7 +26,6 @@ def format_summary(festival: dict) -> str:
 
 
 def format_venues(festival: dict) -> str:
-    """Return formatted venue list and total seats."""
     lines = []
     total_seats = 0
     for venue in festival["venues"]:
@@ -30,20 +37,30 @@ def format_venues(festival: dict) -> str:
     return "\n".join(lines)
 
 
-def format_programme(festival: dict, day: str) -> str:
-    """Return the programme for a specific festival day."""
+def format_programme(festival: dict, day_str: str) -> str:
+    target_day = parse_date(day_str)
     venue_map = get_venue_map(festival)
-    lines = [f"Programme for {day}:"]
-    for perf in festival["performances"]:
-        if perf["start"][:10] == day:
-            time = perf["start"][11:]
-            venue_name = venue_map.get(perf["venue"], perf["venue"])
-            lines.append(f"{time} | {venue_name} | {perf['title']} ({perf['kind']})")
+
+    # Filter and sort by start datetime
+    matching = [
+        perf
+        for perf in festival["performances"]
+        if performance_festival_day(perf) == target_day
+    ]
+    matching.sort(key=performance_start)
+
+    lines = [f"Programme for {target_day:%A %d %B}:"]
+    for perf in matching:
+        start = performance_start(perf)
+        end = performance_end(perf)
+        venue_name = venue_map.get(perf["venue"], perf["venue"])
+        lines.append(
+            f"{start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({perf['kind']})"
+        )
     return "\n".join(lines)
 
 
 def format_artist_schedule(festival: dict, artist_slug: str) -> str:
-    """Return scheduled performances and roles for an artist."""
     artist_name = None
     for artist in festival["artists"]:
         if slugify(artist["name"]) == artist_slug:
@@ -56,6 +73,7 @@ def format_artist_schedule(festival: dict, artist_slug: str) -> str:
     venue_map = get_venue_map(festival)
     lines = [artist_name]
 
+    matching = []
     for perf in festival["performances"]:
         role = None
         if perf.get("artist") == artist_slug:
@@ -68,19 +86,66 @@ def format_artist_schedule(festival: dict, artist_slug: str) -> str:
             role = "teacher"
 
         if role:
-            date_time = f"{perf['start'][:10]} {perf['start'][11:]}"
+            matching.append((perf, role))
+
+    matching.sort(key=lambda item: performance_start(item[0]))
+
+    for perf, role in matching:
+        start = performance_start(perf)
+        end = performance_end(perf)
+        day_date = performance_festival_day(perf)
+        day_label = f"{day_date:%a} {day_date.day}"
+        venue_name = venue_map.get(perf["venue"], perf["venue"])
+        lines.append(
+            f"{day_label} {start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({role})"
+        )
+
+    return "\n".join(lines)
+
+
+def format_now(festival: dict, moment_str: str) -> str:
+    at = parse_datetime(moment_str)
+    venue_map = get_venue_map(festival)
+
+    currently_playing = []
+    upcoming = []
+
+    for perf in festival["performances"]:
+        start = performance_start(perf)
+        end = performance_end(perf)
+        if start <= at < end:
+            currently_playing.append(perf)
+        elif at <= start:
+            upcoming.append(perf)
+
+    upcoming.sort(key=performance_start)
+    next_three = upcoming[:3]
+
+    lines = [f"On stage at {at:%Y-%m-%d %H:%M}:"]
+    for perf in currently_playing:
+        end = performance_end(perf)
+        venue_name = venue_map.get(perf["venue"], perf["venue"])
+        lines.append(f"- {perf['title']} at {venue_name}, until {end:%H:%M}")
+
+    if next_three:
+        lines.append("Up next:")
+        for perf in next_three:
+            start = performance_start(perf)
+            end = performance_end(perf)
             venue_name = venue_map.get(perf["venue"], perf["venue"])
-            lines.append(f"{date_time} | {venue_name} | {perf['title']} ({role})")
+            lines.append(
+                f"- {start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({perf['kind']})"
+            )
 
     return "\n".join(lines)
 
 
 def format_usage() -> str:
-    """Return CLI usage help."""
     return (
         "Usage:\n"
         "  uv run main.py\n"
         "  uv run main.py venues\n"
         "  uv run main.py programme <YYYY-MM-DD>\n"
-        "  uv run main.py artist <artist-slug>"
+        "  uv run main.py artist <artist-slug>\n"
+        "  uv run main.py now <YYYY-MM-DDTHH:MM>"
     )

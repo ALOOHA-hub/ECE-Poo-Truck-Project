@@ -1,6 +1,7 @@
 from helpers.data import load_festival
 from helpers.formatters import (
     format_artist_schedule,
+    format_now,
     format_programme,
     format_summary,
     format_usage,
@@ -13,5 +14,6 @@ __all__ = [
     "format_venues",
     "format_programme",
     "format_artist_schedule",
+    "format_now",
     "format_usage",
 ]
