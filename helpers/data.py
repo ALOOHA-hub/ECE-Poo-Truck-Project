@@ -1,6 +1,7 @@
 import json
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from config import DEFAULT_DATA_PATH, PerformanceKind
 from helpers.slug import slugify
@@ -16,10 +17,15 @@ def load_festival(path: Path = DEFAULT_DATA_PATH) -> dict:
         raise ValueError(f"{path} is damaged (line {err.lineno}).") from None
 
 
-def save_festival(festival_dict: dict, path: Path = DEFAULT_DATA_PATH) -> None:
+def save_festival(festival_or_dict: Any, path: Path = DEFAULT_DATA_PATH) -> None:
     path.parent.mkdir(exist_ok=True)
+    if hasattr(festival_or_dict, "to_dict"):
+        payload = festival_or_dict.to_dict()
+    else:
+        payload = festival_or_dict
+
     with open(path, "w", encoding="utf-8") as file:
-        json.dump(festival_dict, file, ensure_ascii=False, indent=2)
+        json.dump(payload, file, ensure_ascii=False, indent=2)
 
 
 def get_venue_map(festival: dict) -> dict[str, str]:
@@ -31,8 +37,38 @@ def get_artist_map(festival: dict) -> dict[str, str]:
 
 
 def load_festival_aggregate(path: Path = DEFAULT_DATA_PATH):
-    # Imported locally to avoid circular dependencies during module loading
-    from models import Artist, Festival, Performance, Venue
+    from models import Artist, Festival, Lineup, SoloShow, Venue, Workshop
+
+    factories = {
+        PerformanceKind.SOLO: lambda p: SoloShow(
+            title=p["title"],
+            venue=p["venue"],
+            start=datetime.fromisoformat(p["start"]),
+            duration_minutes=p["duration_minutes"],
+            description=p.get("description", ""),
+            artist=p.get("artist", ""),
+            min_age=p.get("min_age", 0),
+        ),
+        PerformanceKind.LINEUP: lambda p: Lineup(
+            title=p["title"],
+            venue=p["venue"],
+            start=datetime.fromisoformat(p["start"]),
+            duration_minutes=p["duration_minutes"],
+            description=p.get("description", ""),
+            host=p.get("host", ""),
+            acts=p.get("acts", []),
+        ),
+        PerformanceKind.WORKSHOP: lambda p: Workshop(
+            title=p["title"],
+            venue=p["venue"],
+            start=datetime.fromisoformat(p["start"]),
+            duration_minutes=p["duration_minutes"],
+            description=p.get("description", ""),
+            teacher=p.get("teacher", ""),
+            max_participants=p.get("max_participants", 0),
+            participants=p.get("participants", []),
+        ),
+    }
 
     raw = load_festival(path)
 
@@ -48,23 +84,9 @@ def load_festival_aggregate(path: Path = DEFAULT_DATA_PATH):
 
     performances = []
     for p in raw["performances"]:
-        performances.append(
-            Performance(
-                kind=PerformanceKind(p["kind"]),
-                title=p["title"],
-                venue=p["venue"],
-                start=datetime.fromisoformat(p["start"]),
-                duration_minutes=p["duration_minutes"],
-                description=p.get("description", ""),
-                artist=p.get("artist"),
-                min_age=p.get("min_age"),
-                host=p.get("host"),
-                acts=p.get("acts", []),
-                teacher=p.get("teacher"),
-                max_participants=p.get("max_participants"),
-                participants=p.get("participants", []),
-            )
-        )
+        kind_enum = PerformanceKind(p["kind"])
+        factory = factories[kind_enum]
+        performances.append(factory(p))
 
     return Festival(
         name=raw["name"],
