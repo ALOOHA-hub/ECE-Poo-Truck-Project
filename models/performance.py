@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from dataclasses import dataclass
+from helpers.slug import slugify
+
 
 from config import (
     DATE_FORMAT,
@@ -47,8 +50,14 @@ class Performance:
     def id(self) -> str:
         return f"{self.venue}-{self.start.strftime(PERFORMANCE_ID_FORMAT)}"
 
+    def __lt__(self, other: "Performance") -> bool:
+        """Sort by start time, then by venue slug."""
+        return (self.start, self.venue) < (other.start, other.venue)
+
+    def __str__(self) -> str:
+        return f"{self.start:%H:%M}-{self.end:%H:%M} | {self.venue} | {self.title} ({self.kind.value})"
+
     def involves(self, artist_slug: str) -> bool:
-        """Check if an artist is part of this performance in any role."""
         if self.artist == artist_slug or self.host == artist_slug or self.teacher == artist_slug:
             return True
         return artist_slug in self.acts
@@ -64,8 +73,19 @@ class Performance:
             return ArtistRole.TEACHER
         return None
 
+    def artists_involved(self) -> set[str]:
+        """Return all artist slugs involved in this performance in any role."""
+        slugs = set()
+        if self.artist:
+            slugs.add(self.artist)
+        if self.host:
+            slugs.add(self.host)
+        slugs.update(self.acts)
+        if self.teacher:
+            slugs.add(self.teacher)
+        return slugs
+
     def get_summary(self, artists_by_slug: dict[str, Artist]) -> str:
-        """Format the summary string according to performance kind."""
         if self.kind == PerformanceKind.SOLO:
             artist_obj = artists_by_slug.get(self.artist or "")
             return artist_obj.name if artist_obj else (self.artist or "")
@@ -91,12 +111,10 @@ class Performance:
         venues_by_slug: dict[str, Venue],
         artists_by_slug: dict[str, Artist],
     ) -> dict:
-        """Construct the contract dictionary required by API.md and the web UI."""
         venue_obj = venues_by_slug.get(self.venue)
         venue_name = venue_obj.name if venue_obj else self.venue
         capacity = venue_obj.capacity if venue_obj else 0
 
-        # Build list of involved artist objects
         involved_artists = []
         if self.kind == PerformanceKind.SOLO and self.artist:
             artist_obj = artists_by_slug.get(self.artist)
@@ -133,7 +151,6 @@ class Performance:
             "artists": involved_artists,
         }
 
-        # Subclass-specific fields
         if self.kind == PerformanceKind.SOLO:
             view["artist"] = self.artist
             view["min_age"] = self.min_age
