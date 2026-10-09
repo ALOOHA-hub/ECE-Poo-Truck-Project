@@ -42,6 +42,14 @@ The content is organized as follows:
 <directory_structure>
 .gitignore
 .python-version
+api.py
+cli/__init__.py
+cli/handlers.py
+cli/parser.py
+config/__init__.py
+config/constants.py
+config/enums.py
+data/festival.json
 ece-poo-track/.git/config
 ece-poo-track/.git/description
 ece-poo-track/.git/FETCH_HEAD
@@ -118,29 +126,214 @@ ece-poo-track/data/festival.json
 ece-poo-track/pyproject.toml
 ece-poo-track/README.md
 ece-poo-track/tests/test_side.py
+helpers/__init__.py
+helpers/data.py
+helpers/formatters.py
+helpers/rules.py
+helpers/slug.py
+helpers/time.py
 main.py
+models/__init__.py
+models/artist.py
+models/festival.py
+models/performances/__init__.py
+models/performances/base.py
+models/performances/lineup.py
+models/performances/solo.py
+models/performances/workshop.py
+models/venue.py
 pyproject.toml
 README.md
+repositories/__init__.py
+repositories/festival_repository.py
+schemas/__init__.py
+schemas/registration.py
+tests/test_festival_rules.py
+tests/test_repository_and_cli.py
+tests/test_workshop_registration.py
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path=".gitignore">
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+<file path="cli/__init__.py">
+from cli.parser import build_parser, run_cli
 
-# Virtual environments
-.venv
+__all__ = ["build_parser", "run_cli"]
 </file>
 
-<file path=".python-version">
-3.14
+<file path="cli/handlers.py">
+import sys
+import uvicorn
+
+from config import DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT
+from helpers.formatters import (
+    format_artist_schedule,
+    format_now,
+    format_programme,
+    format_summary,
+    format_venues,
+)
+from helpers.time import parse_datetime
+from models import SoloShow
+from repositories import FestivalRepository
+
+
+def handle_summary(repo: FestivalRepository) -> None:
+    raw = repo.load_raw()
+    print(format_summary(raw))
+
+
+def handle_venues(repo: FestivalRepository) -> None:
+    raw = repo.load_raw()
+    print(format_venues(raw))
+
+
+def handle_programme(repo: FestivalRepository, day: str) -> None:
+    raw = repo.load_raw()
+    print(format_programme(raw, day))
+
+
+def handle_artist(repo: FestivalRepository, slug: str) -> None:
+    raw = repo.load_raw()
+    print(format_artist_schedule(raw, slug))
+
+
+def handle_now(repo: FestivalRepository, moment: str) -> None:
+    raw = repo.load_raw()
+    print(format_now(raw, moment))
+
+
+def handle_add(repo: FestivalRepository) -> None:
+    title = input("Title: ").strip()
+    artist = input("Artist (slug): ").strip()
+    venue = input("Venue (slug): ").strip()
+    start_str = input("Start (YYYY-MM-DDTHH:MM): ").strip()
+    raw_duration = input("Duration (minutes): ").strip()
+
+    try:
+        duration = int(raw_duration)
+    except ValueError:
+        raise ValueError(f"'{raw_duration}' is not a number of minutes.") from None
+
+    start_dt = parse_datetime(start_str)
+
+    new_show = SoloShow(
+        title=title,
+        venue=venue,
+        start=start_dt,
+        duration_minutes=duration,
+        artist=artist,
+    )
+
+    festival = repo.get_festival()
+    festival.add_performance(new_show)
+    repo.save_festival(festival)
+
+    print(f"Added: {new_show.id}")
+
+
+def handle_cancel(repo: FestivalRepository, perf_id: str) -> None:
+    festival = repo.get_festival()
+    cancelled = festival.cancel_performance(perf_id)
+    repo.save_festival(festival)
+    print(f"Cancelled: {cancelled.title}")
+
+
+def handle_serve(host: str = DEFAULT_SERVER_HOST, port: int = DEFAULT_SERVER_PORT) -> None:
+    uvicorn.run("api:app", host=host, port=port, reload=True)
+</file>
+
+<file path="cli/parser.py">
+import argparse
+from pathlib import Path
+import sys
+
+from cli.handlers import (
+    handle_add,
+    handle_artist,
+    handle_cancel,
+    handle_now,
+    handle_programme,
+    handle_serve,
+    handle_summary,
+    handle_venues,
+)
+from config import DEFAULT_DATA_PATH, DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT
+from repositories import FestivalRepository
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="festival",
+        description="Deauville Festival du Rire management CLI.",
+    )
+    parser.add_argument(
+        "-d",
+        "--data",
+        type=Path,
+        default=DEFAULT_DATA_PATH,
+        help="Path to the festival JSON dataset (defaults to data/festival.json).",
+    )
+
+    subparsers = parser.add_subparsers(dest="subcommand", required=False)
+
+    # venues
+    subparsers.add_parser("venues", help="List all festival venues and total capacity.")
+
+    # programme <day>
+    prog_parser = subparsers.add_parser("programme", help="Show the day's schedule.")
+    prog_parser.add_argument("day", help="Target date in YYYY-MM-DD format.")
+
+    # artist <slug>
+    artist_parser = subparsers.add_parser("artist", help="Show an artist's festival schedule.")
+    artist_parser.add_argument("slug", help="Artist unique slug identifier.")
+
+    # now <moment>
+    now_parser = subparsers.add_parser("now", help="Show currently running and upcoming performances.")
+    now_parser.add_argument("moment", help="ISO datetime timestamp (YYYY-MM-DDTHH:MM).")
+
+    # add
+    subparsers.add_parser("add", help="Interactively schedule a new solo performance.")
+
+    # cancel <id>
+    cancel_parser = subparsers.add_parser("cancel", help="Cancel a scheduled performance by its unique ID.")
+    cancel_parser.add_argument("id", help="Performance ID (<venue>-<YYYY-MM-DD-HHMM>).")
+
+    # serve
+    serve_parser = subparsers.add_parser("serve", help="Launch the web API server.")
+    serve_parser.add_argument("--host", default=DEFAULT_SERVER_HOST, help="Host to bind to.")
+    serve_parser.add_argument("--port", type=int, default=DEFAULT_SERVER_PORT, help="Port to bind to.")
+
+    return parser
+
+
+def run_cli(args: list[str] | None = None) -> None:
+    parser = build_parser()
+    parsed = parser.parse_args(args)
+
+    repo = FestivalRepository(parsed.data)
+
+    try:
+        if parsed.subcommand is None:
+            handle_summary(repo)
+        elif parsed.subcommand == "venues":
+            handle_venues(repo)
+        elif parsed.subcommand == "programme":
+            handle_programme(repo, parsed.day)
+        elif parsed.subcommand == "artist":
+            handle_artist(repo, parsed.slug)
+        elif parsed.subcommand == "now":
+            handle_now(repo, parsed.moment)
+        elif parsed.subcommand == "add":
+            handle_add(repo)
+        elif parsed.subcommand == "cancel":
+            handle_cancel(repo, parsed.id)
+        elif parsed.subcommand == "serve":
+            handle_serve(host=parsed.host, port=parsed.port)
+    except (ValueError, KeyError) as err:
+        print(f"Error: {err}")
+        sys.exit(1)
 </file>
 
 <file path="ece-poo-track/.git/config">
@@ -3935,13 +4128,1966 @@ def test_bank_api():
     assert unknown.status_code == 404
 </file>
 
-<file path="main.py">
-def main():
-    print("Hello from ece-poo-truck-project!")
+<file path="repositories/__init__.py">
+from repositories.festival_repository import FestivalRepository
+
+__all__ = ["FestivalRepository"]
+</file>
+
+<file path="repositories/festival_repository.py">
+from datetime import date, datetime
+import json
+from pathlib import Path
+from typing import Any
+
+from config import DEFAULT_DATA_PATH, PerformanceKind
+from models import Artist, Festival, Lineup, Performance, SoloShow, Venue, Workshop
 
 
-if __name__ == "__main__":
-    main()
+class FestivalRepository:
+    """Encapsulates loading and persisting festival state to and from JSON files."""
+
+    def __init__(self, data_path: Path | str = DEFAULT_DATA_PATH) -> None:
+        self.data_path = Path(data_path)
+
+    def load_raw(self) -> dict[str, Any]:
+        """Load and parse the JSON file, raising domain-friendly errors."""
+        try:
+            with open(self.data_path, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except FileNotFoundError:
+            raise ValueError(f"Data file '{self.data_path}' not found.") from None
+        except json.JSONDecodeError as err:
+            raise ValueError(f"{self.data_path} is damaged (line {err.lineno}).") from None
+
+    def save_raw(self, payload: dict[str, Any]) -> None:
+        """Write a dictionary back to disk."""
+        self.data_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.data_path, "w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=2)
+
+    def get_festival(self) -> Festival:
+        """Hydrate raw JSON data into the Festival domain aggregate."""
+        raw = self.load_raw()
+
+        venues = [
+            Venue(name=v["name"], capacity=v["capacity"], address=v["address"])
+            for v in raw["venues"]
+        ]
+
+        artists = [
+            Artist(name=a["name"], bio=a.get("bio", ""), photo_url=a.get("photo_url", ""))
+            for a in raw["artists"]
+        ]
+
+        factories = {
+            PerformanceKind.SOLO: lambda p: SoloShow(
+                title=p["title"],
+                venue=p["venue"],
+                start=datetime.fromisoformat(p["start"]),
+                duration_minutes=p["duration_minutes"],
+                description=p.get("description", ""),
+                artist=p.get("artist", ""),
+                min_age=p.get("min_age", 0),
+            ),
+            PerformanceKind.LINEUP: lambda p: Lineup(
+                title=p["title"],
+                venue=p["venue"],
+                start=datetime.fromisoformat(p["start"]),
+                duration_minutes=p["duration_minutes"],
+                description=p.get("description", ""),
+                host=p.get("host", ""),
+                acts=p.get("acts", []),
+            ),
+            PerformanceKind.WORKSHOP: lambda p: Workshop(
+                title=p["title"],
+                venue=p["venue"],
+                start=datetime.fromisoformat(p["start"]),
+                duration_minutes=p["duration_minutes"],
+                description=p.get("description", ""),
+                teacher=p.get("teacher", ""),
+                max_participants=p.get("max_participants", 0),
+                participants=p.get("participants", []),
+            ),
+        }
+
+        performances: list[Performance] = []
+        for p in raw["performances"]:
+            kind_enum = PerformanceKind(p["kind"])
+            performances.append(factories[kind_enum](p))
+
+        return Festival(
+            name=raw["name"],
+            first_day=date.fromisoformat(raw["first_day"]),
+            last_day=date.fromisoformat(raw["last_day"]),
+            venues=venues,
+            artists=artists,
+            performances=performances,
+        )
+
+    def save_festival(self, festival_or_payload: Festival | dict[str, Any]) -> None:
+        """Persist a Festival aggregate or dictionary back to the repository's path."""
+        if hasattr(festival_or_payload, "to_dict"):
+            payload = festival_or_payload.to_dict()
+        else:
+            payload = festival_or_payload
+        self.save_raw(payload)
+</file>
+
+<file path="tests/test_repository_and_cli.py">
+import json
+from pathlib import Path
+import pytest
+
+from cli.parser import build_parser, run_cli
+from config import DEFAULT_DATA_PATH
+from models import SoloShow
+from repositories import FestivalRepository
+
+
+@pytest.fixture
+def temp_festival_file(tmp_path: Path) -> Path:
+    """Create an isolated temporary copy of festival.json for test mutation."""
+    dest = tmp_path / "test_fest.json"
+    with open(DEFAULT_DATA_PATH, "r", encoding="utf-8") as src:
+        content = src.read()
+    dest.write_text(content, encoding="utf-8")
+    return dest
+
+
+def test_repository_loads_and_counts_entities():
+    repo = FestivalRepository(DEFAULT_DATA_PATH)
+    fest = repo.get_festival()
+    assert len(fest.venues_by_slug) == 4
+    assert len(fest.artists_by_slug) == 12
+    assert len(fest.performances) > 0
+
+
+def test_repository_missing_file_raises_value_error(tmp_path: Path):
+    missing_path = tmp_path / "non_existent.json"
+    repo = FestivalRepository(missing_path)
+    with pytest.raises(ValueError, match="not found"):
+        repo.get_festival()
+
+
+def test_repository_corrupted_file_raises_value_error(tmp_path: Path):
+    corrupted_path = tmp_path / "corrupted.json"
+    corrupted_path.write_text("{ broken json content", encoding="utf-8")
+    repo = FestivalRepository(corrupted_path)
+    with pytest.raises(ValueError, match="is damaged"):
+        repo.get_festival()
+
+
+def test_repository_save_and_rehydrate(temp_festival_file: Path):
+    repo = FestivalRepository(temp_festival_file)
+    festival = repo.get_festival()
+
+    initial_count = len(festival.performances)
+    first_id = festival.performances[0].id
+
+    # Cancel a performance and save to disk
+    cancelled = festival.cancel_performance(first_id)
+    assert cancelled.id == first_id
+    repo.save_festival(festival)
+
+    # Re-read from disk to ensure persistence
+    reloaded_repo = FestivalRepository(temp_festival_file)
+    reloaded_fest = reloaded_repo.get_festival()
+    assert len(reloaded_fest.performances) == initial_count - 1
+    assert first_id not in reloaded_fest.performances_by_id
+
+
+def test_cli_parser_defaults():
+    parser = build_parser()
+    parsed = parser.parse_args([])
+    assert parsed.data == DEFAULT_DATA_PATH
+    assert parsed.subcommand is None
+
+
+def test_cli_parser_custom_data_path(tmp_path: Path):
+    custom_path = str(tmp_path / "custom.json")
+    parser = build_parser()
+    parsed = parser.parse_args(["--data", custom_path, "venues"])
+    assert parsed.data == Path(custom_path)
+    assert parsed.subcommand == "venues"
+
+
+def test_cli_run_summary(capsys: pytest.CaptureFixture):
+    run_cli([])
+    captured = capsys.readouterr().out
+    assert "Deauville Festival du Rire" in captured
+    assert "venues" in captured
+
+
+def test_cli_run_venues(capsys: pytest.CaptureFixture):
+    run_cli(["venues"])
+    captured = capsys.readouterr().out
+    assert "grand-casino: Grand Casino, 650 seats" in captured
+    assert "Total: 1130 seats" in captured
+
+def test_cli_run_programme_with_time_cutoff(capsys: pytest.CaptureFixture):
+    run_cli(["programme", "2027-06-11"])
+    captured = capsys.readouterr().out
+    assert "Programme for Friday 11 June:" in captured
+    assert "After Hours" in captured
+
+
+def test_cli_invalid_date_exits_with_error(capsys: pytest.CaptureFixture):
+    with pytest.raises(SystemExit) as exc_info:
+        run_cli(["programme", "Invalid-Date"])
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr().out
+    assert "Error: 'Invalid-Date' is not a day, use YYYY-MM-DD." in captured
+</file>
+
+<file path=".gitignore">
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+</file>
+
+<file path=".python-version">
+3.14
+</file>
+
+<file path="config/enums.py">
+from enum import StrEnum
+
+
+class PerformanceKind(StrEnum):
+    SOLO = "solo"
+    LINEUP = "lineup"
+    WORKSHOP = "workshop"
+
+
+class ArtistRole(StrEnum):
+    SOLO = "solo"
+    HOST = "host"
+    ACT = "act"
+    TEACHER = "teacher"
+</file>
+
+<file path="data/festival.json">
+{
+  "name": "Deauville Festival du Rire 2027",
+  "first_day": "2027-06-10",
+  "last_day": "2027-06-13",
+  "venues": [
+    {
+      "name": "Grand Casino",
+      "capacity": 650,
+      "address": "Seafront, main hall"
+    },
+    {
+      "name": "Théâtre des Planches",
+      "capacity": 320,
+      "address": "Town centre"
+    },
+    {
+      "name": "Le Kiosque",
+      "capacity": 120,
+      "address": "Beach promenade"
+    },
+    {
+      "name": "La Cabane",
+      "capacity": 40,
+      "address": "Beach, next to the lifeguard post"
+    }
+  ],
+  "artists": [
+    {
+      "name": "Hugo Lemaire",
+      "bio": "Musical comedy with a ukulele and too many chords.",
+      "photo_url": ""
+    },
+    {
+      "name": "Inès Moreau",
+      "bio": "Improviser and teacher. Nothing is ever written in advance.",
+      "photo_url": ""
+    },
+    {
+      "name": "Jeanne Aubry",
+      "bio": "Writer for radio shows, now on stage with her own jokes.",
+      "photo_url": ""
+    },
+    {
+      "name": "Karim Benali",
+      "bio": "Observational comedy about offices, trains and neighbours.",
+      "photo_url": ""
+    },
+    {
+      "name": "Léa Fontaine",
+      "bio": "Absurd tales, invented animals and very long pauses.",
+      "photo_url": ""
+    },
+    {
+      "name": "Max Pellerin",
+      "bio": "Fast, loud and proud of it. Twelve years of open mics.",
+      "photo_url": ""
+    },
+    {
+      "name": "Maya Choukri",
+      "bio": "Newcomer of the year at the Paris comedy clubs.",
+      "photo_url": ""
+    },
+    {
+      "name": "Nora Lebrun",
+      "bio": "Deadpan stories about family dinners that went wrong.",
+      "photo_url": ""
+    },
+    {
+      "name": "Paul Kerbrat",
+      "bio": "Breton host, master of ceremonies of the festival.",
+      "photo_url": ""
+    },
+    {
+      "name": "Sacha Diallo",
+      "bio": "Growing up between Dakar and Rouen, told with a straight face.",
+      "photo_url": ""
+    },
+    {
+      "name": "Tom Vasseur",
+      "bio": "Former teacher who turned his students' excuses into a show.",
+      "photo_url": ""
+    },
+    {
+      "name": "Élodie Marchal",
+      "bio": "Stand-up about sport, failure and trying again.",
+      "photo_url": ""
+    }
+  ],
+  "performances": [
+    {
+      "kind": "lineup",
+      "title": "Opening Gala",
+      "venue": "grand-casino",
+      "start": "2027-06-10T20:30",
+      "duration_minutes": 120,
+      "description": "Four headliners open the first edition.",
+      "host": "paul-kerbrat",
+      "acts": [
+        "nora-lebrun",
+        "max-pellerin",
+        "lea-fontaine",
+        "karim-benali"
+      ]
+    },
+    {
+      "kind": "solo",
+      "title": "Family Business",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-10T21:00",
+      "duration_minutes": 75,
+      "description": "",
+      "artist": "sacha-diallo",
+      "min_age": 0
+    },
+    {
+      "kind": "lineup",
+      "title": "Open Mic Night",
+      "venue": "le-kiosque",
+      "start": "2027-06-10T22:30",
+      "duration_minutes": 90,
+      "description": "",
+      "host": "tom-vasseur",
+      "acts": [
+        "hugo-lemaire",
+        "elodie-marchal",
+        "maya-choukri"
+      ]
+    },
+    {
+      "kind": "workshop",
+      "title": "Improv for Beginners",
+      "venue": "la-cabane",
+      "start": "2027-06-11T10:30",
+      "duration_minutes": 120,
+      "description": "No experience needed. Comfortable shoes recommended.",
+      "teacher": "ines-moreau",
+      "max_participants": 12,
+      "participants": [
+        "Camille R.",
+        "Yanis B.",
+        "Lou M."
+      ]
+    },
+    {
+      "kind": "workshop",
+      "title": "Writing a Punchline",
+      "venue": "le-kiosque",
+      "start": "2027-06-11T15:00",
+      "duration_minutes": 90,
+      "description": "",
+      "teacher": "jeanne-aubry",
+      "max_participants": 20,
+      "participants": [
+        "Adam K."
+      ]
+    },
+    {
+      "kind": "solo",
+      "title": "Nothing Serious",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-11T18:00",
+      "duration_minutes": 75,
+      "description": "",
+      "artist": "nora-lebrun",
+      "min_age": 0
+    },
+    {
+      "kind": "solo",
+      "title": "Tall Tales",
+      "venue": "grand-casino",
+      "start": "2027-06-11T20:30",
+      "duration_minutes": 80,
+      "description": "",
+      "artist": "lea-fontaine",
+      "min_age": 0
+    },
+    {
+      "kind": "solo",
+      "title": "Straight Face",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-11T21:30",
+      "duration_minutes": 70,
+      "description": "",
+      "artist": "karim-benali",
+      "min_age": 16
+    },
+    {
+      "kind": "solo",
+      "title": "Late Laughs",
+      "venue": "le-kiosque",
+      "start": "2027-06-11T23:30",
+      "duration_minutes": 60,
+      "description": "",
+      "artist": "max-pellerin",
+      "min_age": 18
+    },
+    {
+      "kind": "lineup",
+      "title": "After Hours",
+      "venue": "le-kiosque",
+      "start": "2027-06-12T01:00",
+      "duration_minutes": 60,
+      "description": "The last show of Friday night, after midnight.",
+      "host": "tom-vasseur",
+      "acts": [
+        "hugo-lemaire",
+        "maya-choukri"
+      ]
+    },
+    {
+      "kind": "workshop",
+      "title": "Stand-up Lab",
+      "venue": "la-cabane",
+      "start": "2027-06-12T10:30",
+      "duration_minutes": 120,
+      "description": "",
+      "teacher": "paul-kerbrat",
+      "max_participants": 10,
+      "participants": [
+        "Chloé D.",
+        "Nathan P.",
+        "Inès T.",
+        "Hugo S."
+      ]
+    },
+    {
+      "kind": "solo",
+      "title": "Brunch & Punchlines",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-12T11:00",
+      "duration_minutes": 60,
+      "description": "",
+      "artist": "karim-benali",
+      "min_age": 0
+    },
+    {
+      "kind": "lineup",
+      "title": "New Faces",
+      "venue": "le-kiosque",
+      "start": "2027-06-12T15:00",
+      "duration_minutes": 90,
+      "description": "",
+      "host": "jeanne-aubry",
+      "acts": [
+        "elodie-marchal",
+        "hugo-lemaire",
+        "maya-choukri"
+      ]
+    },
+    {
+      "kind": "solo",
+      "title": "Family Business",
+      "venue": "grand-casino",
+      "start": "2027-06-12T17:00",
+      "duration_minutes": 75,
+      "description": "",
+      "artist": "sacha-diallo",
+      "min_age": 0
+    },
+    {
+      "kind": "solo",
+      "title": "Half Past Funny",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-12T18:30",
+      "duration_minutes": 70,
+      "description": "",
+      "artist": "ines-moreau",
+      "min_age": 0
+    },
+    {
+      "kind": "solo",
+      "title": "Nothing Serious",
+      "venue": "grand-casino",
+      "start": "2027-06-12T20:30",
+      "duration_minutes": 75,
+      "description": "",
+      "artist": "nora-lebrun",
+      "min_age": 0
+    },
+    {
+      "kind": "lineup",
+      "title": "Deauville Comedy Club",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-12T21:00",
+      "duration_minutes": 100,
+      "description": "",
+      "host": "max-pellerin",
+      "acts": [
+        "tom-vasseur",
+        "lea-fontaine",
+        "elodie-marchal"
+      ]
+    },
+    {
+      "kind": "solo",
+      "title": "Midnight Snack",
+      "venue": "le-kiosque",
+      "start": "2027-06-12T23:30",
+      "duration_minutes": 60,
+      "description": "",
+      "artist": "hugo-lemaire",
+      "min_age": 16
+    },
+    {
+      "kind": "workshop",
+      "title": "Improv for Beginners",
+      "venue": "la-cabane",
+      "start": "2027-06-13T10:30",
+      "duration_minutes": 120,
+      "description": "",
+      "teacher": "ines-moreau",
+      "max_participants": 12,
+      "participants": []
+    },
+    {
+      "kind": "solo",
+      "title": "Brunch & Punchlines",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-13T11:00",
+      "duration_minutes": 60,
+      "description": "",
+      "artist": "karim-benali",
+      "min_age": 0
+    },
+    {
+      "kind": "solo",
+      "title": "First Time Here",
+      "venue": "le-kiosque",
+      "start": "2027-06-13T15:00",
+      "duration_minutes": 60,
+      "description": "",
+      "artist": "maya-choukri",
+      "min_age": 0
+    },
+    {
+      "kind": "solo",
+      "title": "Tall Tales",
+      "venue": "theatre-des-planches",
+      "start": "2027-06-13T17:00",
+      "duration_minutes": 80,
+      "description": "",
+      "artist": "lea-fontaine",
+      "min_age": 0
+    },
+    {
+      "kind": "lineup",
+      "title": "Closing Gala",
+      "venue": "grand-casino",
+      "start": "2027-06-13T20:30",
+      "duration_minutes": 130,
+      "description": "Everybody back on stage for the last night.",
+      "host": "paul-kerbrat",
+      "acts": [
+        "nora-lebrun",
+        "sacha-diallo",
+        "ines-moreau",
+        "max-pellerin",
+        "jeanne-aubry"
+      ]
+    }
+  ]
+}
+</file>
+
+<file path="helpers/rules.py">
+from config import (
+    BUFFER_GAP,
+    MAX_DURATION_MINUTES,
+    MIN_DURATION_MINUTES,
+    PERFORMANCE_ID_FORMAT,
+    ArtistRole,
+)
+from helpers.data import get_artist_map, get_venue_map
+from helpers.time import (
+    parse_date,
+    performance_end,
+    performance_festival_day,
+    performance_start,
+)
+
+
+def get_performance_id(perf: dict) -> str:
+    start_dt = performance_start(perf)
+    return f"{perf['venue']}-{start_dt.strftime(PERFORMANCE_ID_FORMAT)}"
+
+
+def get_artists_in_performance(perf: dict) -> set[str]:
+    involved = set()
+    if perf.get(ArtistRole.SOLO):
+        involved.add(perf[ArtistRole.SOLO])
+    if perf.get(ArtistRole.HOST):
+        involved.add(perf[ArtistRole.HOST])
+    if "acts" in perf:
+        involved.update(perf["acts"])
+    if perf.get(ArtistRole.TEACHER):
+        involved.add(perf[ArtistRole.TEACHER])
+    return involved
+
+
+def validate_performance(festival: dict, new_perf: dict) -> None:
+    venues = get_venue_map(festival)
+    artists = get_artist_map(festival)
+
+    # 1. Venue & artist exist
+    if new_perf["venue"] not in venues:
+        raise ValueError(f"Unknown venue '{new_perf['venue']}'.")
+    if new_perf.get("artist") and new_perf["artist"] not in artists:
+        raise ValueError(f"Unknown artist '{new_perf['artist']}'.")
+
+    # 2. Duration limits
+    duration = new_perf["duration_minutes"]
+    if not (MIN_DURATION_MINUTES <= duration <= MAX_DURATION_MINUTES):
+        raise ValueError(
+            f"Duration must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes, got {duration}."
+        )
+
+    # 3. Festival day bounds
+    fest_day = performance_festival_day(new_perf)
+    first_day = parse_date(festival["first_day"])
+    last_day = parse_date(festival["last_day"])
+    if not (first_day <= fest_day <= last_day):
+        raise ValueError(f"{fest_day} is not a day of the festival.")
+
+    # 4. Overlap & buffer checks
+    new_start = performance_start(new_perf)
+    new_end = performance_end(new_perf)
+    new_artists = get_artists_in_performance(new_perf)
+
+    for other in festival["performances"]:
+        other_start = performance_start(other)
+        other_end = performance_end(other)
+
+        conflict = (new_start < other_end + BUFFER_GAP) and (
+            other_start < new_end + BUFFER_GAP
+        )
+        if not conflict:
+            continue
+
+        if other["venue"] == new_perf["venue"]:
+            venue_name = venues[new_perf["venue"]]
+            raise ValueError(
+                f"{venue_name} is busy with {other['title']} "
+                f"({other_start:%Y-%m-%d %H:%M}-{other_end:%H:%M})."
+            )
+
+        other_artists = get_artists_in_performance(other)
+        shared_artists = new_artists.intersection(other_artists)
+        if shared_artists:
+            artist_slug = next(iter(shared_artists))
+            artist_name = artists.get(artist_slug, artist_slug)
+            raise ValueError(f"{artist_name} is on stage in {other['title']}.")
+</file>
+
+<file path="helpers/slug.py">
+import unicodedata
+
+
+def slugify(text: str) -> str:
+    """Normalize unicode, strip accents, and convert non-alphanumeric chars to hyphens."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    plain = decomposed.encode("ascii", "ignore").decode("ascii")
+    result = ""
+    for char in plain.lower():
+        if char.isalnum():
+            result += char
+        elif not result.endswith("-"):
+            result += "-"
+    return result.strip("-")
+</file>
+
+<file path="models/performances/__init__.py">
+from models.performances.base import Performance
+from models.performances.lineup import Lineup
+from models.performances.solo import SoloShow
+from models.performances.workshop import Workshop
+
+__all__ = ["Performance", "SoloShow", "Lineup", "Workshop"]
+</file>
+
+<file path="README.md">
+
+</file>
+
+<file path="schemas/__init__.py">
+from schemas.registration import WorkshopRegistrationRequest
+
+__all__ = ["WorkshopRegistrationRequest"]
+</file>
+
+<file path="schemas/registration.py">
+from pydantic import BaseModel, Field
+
+
+class WorkshopRegistrationRequest(BaseModel):
+    name: str = Field(..., min_length=1, description="Participant name")
+</file>
+
+<file path="tests/test_workshop_registration.py">
+from datetime import date, datetime
+
+from fastapi.testclient import TestClient
+import pytest
+
+from api import app
+from models import Artist, Festival, SoloShow, Venue, Workshop
+
+
+@pytest.fixture
+def workshop_festival() -> Festival:
+    venue = Venue(name="La Cabane", capacity=15, address="Promenade")
+    teacher = Artist(name="Nora Lebrun")
+    workshop = Workshop(
+        title="Improv 101",
+        venue="la-cabane",
+        start=datetime(2027, 6, 11, 10, 0),
+        duration_minutes=90,
+        teacher="nora-lebrun",
+        max_participants=3,
+        participants=["Alice"],
+    )
+    solo = SoloShow(
+        title="Solo Night",
+        venue="la-cabane",
+        start=datetime(2027, 6, 11, 20, 0),
+        duration_minutes=60,
+        artist="nora-lebrun",
+    )
+    return Festival(
+        name="Comedy Fest",
+        first_day=date(2027, 6, 10),
+        last_day=date(2027, 6, 13),
+        venues=[venue],
+        artists=[teacher],
+        performances=[workshop, solo],
+    )
+
+
+def test_workshop_successful_registration(workshop_festival: Festival):
+    workshop_id = "la-cabane-2027-06-11-1000"
+    workshop = workshop_festival.register_workshop(workshop_id, "Bob")
+    assert "Bob" in workshop.participants
+    venue = workshop_festival.venues_by_slug["la-cabane"]
+    assert workshop.places_left(venue) == 1
+
+
+def test_workshop_rejects_empty_or_whitespace_name(workshop_festival: Festival):
+    workshop_id = "la-cabane-2027-06-11-1000"
+    with pytest.raises(ValueError, match="cannot be empty"):
+        workshop_festival.register_workshop(workshop_id, "   ")
+
+
+def test_workshop_rejects_duplicate_registration(workshop_festival: Festival):
+    workshop_id = "la-cabane-2027-06-11-1000"
+    with pytest.raises(ValueError, match="already registered"):
+        workshop_festival.register_workshop(workshop_id, "Alice")
+
+
+def test_workshop_rejects_when_full(workshop_festival: Festival):
+    workshop_id = "la-cabane-2027-06-11-1000"
+    workshop_festival.register_workshop(workshop_id, "Bob")
+    workshop_festival.register_workshop(workshop_id, "Charlie")
+
+    with pytest.raises(ValueError, match="Workshop is full"):
+        workshop_festival.register_workshop(workshop_id, "David")
+
+
+def test_workshop_unregister_success(workshop_festival: Festival):
+    workshop = workshop_festival.performances_by_id["la-cabane-2027-06-11-1000"]
+    assert isinstance(workshop, Workshop)
+    workshop.unregister("Alice")
+    assert "Alice" not in workshop.participants
+
+
+def test_workshop_unregister_non_participant_raises(workshop_festival: Festival):
+    workshop = workshop_festival.performances_by_id["la-cabane-2027-06-11-1000"]
+    assert isinstance(workshop, Workshop)
+    with pytest.raises(ValueError, match="not registered"):
+        workshop.unregister("Ghost")
+
+
+def test_register_for_non_workshop_raises_type_error(workshop_festival: Festival):
+    solo_id = "la-cabane-2027-06-11-2000"
+    with pytest.raises(TypeError, match="is not a workshop"):
+        workshop_festival.register_workshop(solo_id, "Bob")
+
+
+def test_register_for_unknown_performance_raises_key_error(workshop_festival: Festival):
+    with pytest.raises(KeyError, match="non-existent"):
+        workshop_festival.register_workshop("non-existent", "Bob")
+
+
+def test_workshop_serialization_round_trip(workshop_festival: Festival):
+    raw_dict = workshop_festival.to_dict()
+    assert "performances" in raw_dict
+    ws_data = next(p for p in raw_dict["performances"] if p["kind"] == "workshop")
+    assert ws_data["teacher"] == "nora-lebrun"
+    assert ws_data["max_participants"] == 3
+    assert ws_data["participants"] == ["Alice"]
+
+
+def test_api_register_endpoint_404():
+    client = TestClient(app)
+    response = client.post(
+        "/api/performances/does-not-exist/register",
+        json={"name": "Alice"},
+    )
+    assert response.status_code == 404
+    assert "No performance" in response.json()["detail"]
+
+
+def test_api_register_endpoint_not_a_workshop():
+    client = TestClient(app)
+    # Using an existing solo show from festival.json
+    response = client.post(
+        "/api/performances/grand-casino-2027-06-11-2030/register",
+        json={"name": "Alice"},
+    )
+    assert response.status_code == 400
+    assert "is not a workshop" in response.json()["detail"]
+</file>
+
+<file path="helpers/time.py">
+from datetime import date, datetime, timedelta
+
+from config import FESTIVAL_DAY_OFFSET
+
+
+def parse_datetime(iso_str: str) -> datetime:
+    try:
+        return datetime.fromisoformat(iso_str)
+    except ValueError:
+        raise ValueError(
+            f"'{iso_str}' is not a valid timestamp, use YYYY-MM-DDTHH:MM."
+        ) from None
+
+
+def parse_date(iso_str: str) -> date:
+    try:
+        return date.fromisoformat(iso_str)
+    except ValueError:
+        raise ValueError(f"'{iso_str}' is not a day, use YYYY-MM-DD.") from None
+
+
+def performance_start(perf: dict) -> datetime:
+    return parse_datetime(perf["start"])
+
+
+def performance_end(perf: dict) -> datetime:
+    return performance_start(perf) + timedelta(minutes=perf["duration_minutes"])
+
+
+def performance_festival_day(perf: dict) -> date:
+    return (performance_start(perf) - FESTIVAL_DAY_OFFSET).date()
+</file>
+
+<file path="models/performances/base.py">
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+
+from config import (
+    DATE_FORMAT,
+    DATETIME_FORMAT,
+    FESTIVAL_DAY_OFFSET,
+    PERFORMANCE_ID_FORMAT,
+    TIME_FORMAT,
+    ArtistRole,
+    PerformanceKind,
+)
+from models.artist import Artist
+from models.venue import Venue
+
+
+@dataclass
+class Performance(ABC):
+    title: str
+    venue: str  # venue slug
+    start: datetime
+    duration_minutes: int
+    description: str = ""
+
+    kind: PerformanceKind = field(init=False)
+
+    def __post_init__(self) -> None:
+        if type(self) is Performance:
+            raise TypeError("Cannot instantiate abstract class Performance directly.")
+
+    @property
+    def end(self) -> datetime:
+        return self.start + timedelta(minutes=self.duration_minutes)
+
+    @property
+    def festival_day(self) -> date:
+        return (self.start - FESTIVAL_DAY_OFFSET).date()
+
+    @property
+    def id(self) -> str:
+        return f"{self.venue}-{self.start.strftime(PERFORMANCE_ID_FORMAT)}"
+
+    def __lt__(self, other: "Performance") -> bool:
+        return (self.start, self.venue) < (other.start, other.venue)
+
+    def __str__(self) -> str:
+        return f"{self.start:%H:%M}-{self.end:%H:%M} | {self.venue} | {self.title} ({self.kind.value})"
+
+    @abstractmethod
+    def artists_involved(self) -> set[str]:
+        """Return all artist slugs involved in this performance."""
+
+    @abstractmethod
+    def role_of(self, artist_slug: str) -> ArtistRole | None:
+        """Return the role of a given artist in this performance."""
+
+    @abstractmethod
+    def get_summary(self, artists_by_slug: dict[str, Artist]) -> str:
+        """Format the summary string using polymorphism."""
+
+    @abstractmethod
+    def validate_specific_rules(self, venue: Venue) -> None:
+        """Check validation constraints unique to this performance kind."""
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        """Serialize domain model to raw storage dictionary for data/festival.json."""
+
+    def to_view(
+        self,
+        venues_by_slug: dict[str, Venue],
+        artists_by_slug: dict[str, Artist],
+    ) -> dict:
+        venue_obj = venues_by_slug.get(self.venue)
+        venue_name = venue_obj.name if venue_obj else self.venue
+        capacity = venue_obj.capacity if venue_obj else 0
+
+        return {
+            "id": self.id,
+            "kind": self.kind.value,
+            "title": self.title,
+            "venue": self.venue,
+            "venue_name": venue_name,
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "end": self.end.strftime(DATETIME_FORMAT),
+            "duration_minutes": self.duration_minutes,
+            "festival_day": self.festival_day.strftime(DATE_FORMAT),
+            "description": self.description,
+            "summary": self.get_summary(artists_by_slug),
+            "capacity": capacity,
+            "artists": [
+                {"slug": s, "name": artists_by_slug[s].name}
+                for s in self.artists_involved()
+                if s in artists_by_slug
+            ],
+        }
+</file>
+
+<file path="models/performances/lineup.py">
+from dataclasses import dataclass, field
+
+from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
+from models.artist import Artist
+from models.performances.base import Performance
+from models.venue import Venue
+
+
+@dataclass
+class Lineup(Performance):
+    host: str = ""
+    acts: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.kind = PerformanceKind.LINEUP
+
+    def artists_involved(self) -> set[str]:
+        slugs = set(self.acts)
+        if self.host:
+            slugs.add(self.host)
+        return slugs
+
+    def role_of(self, artist_slug: str) -> ArtistRole | None:
+        if self.host == artist_slug:
+            return ArtistRole.HOST
+        if artist_slug in self.acts:
+            return ArtistRole.ACT
+        return None
+
+    def get_summary(self, artists_by_slug: dict[str, Artist]) -> str:
+        host_obj = artists_by_slug.get(self.host)
+        host_name = host_obj.name if host_obj else self.host
+        act_names = [
+            artists_by_slug[a].name if a in artists_by_slug else a for a in self.acts
+        ]
+        return f"hosted by {host_name}, with {', '.join(act_names)}"
+
+    def validate_specific_rules(self, venue: Venue) -> None:
+        if len(self.acts) < 2:
+            raise ValueError(f"A lineup needs at least 2 acts, got {len(self.acts)}.")
+        if len(self.acts) != len(set(self.acts)):
+            raise ValueError("A lineup cannot have duplicate acts.")
+        if self.host in self.acts:
+            raise ValueError(f"The host '{self.host}' cannot also be an act.")
+
+        min_time = len(self.acts) * 10 + (len(self.acts) - 1) * 3
+        if self.duration_minutes < min_time:
+            raise ValueError(
+                f"Lineup with {len(self.acts)} acts requires at least {min_time} minutes, got {self.duration_minutes}."
+            )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "title": self.title,
+            "venue": self.venue,
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "duration_minutes": self.duration_minutes,
+            "description": self.description,
+            "host": self.host,
+            "acts": list(self.acts),
+        }
+
+    def to_view(
+        self,
+        venues_by_slug: dict[str, Venue],
+        artists_by_slug: dict[str, Artist],
+    ) -> dict:
+        view = super().to_view(venues_by_slug, artists_by_slug)
+        view["host"] = self.host
+        view["acts"] = self.acts
+        return view
+</file>
+
+<file path="models/performances/solo.py">
+from dataclasses import dataclass
+
+from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
+from models.artist import Artist
+from models.performances.base import Performance
+from models.venue import Venue
+
+
+@dataclass
+class SoloShow(Performance):
+    artist: str = ""
+    min_age: int = 0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.kind = PerformanceKind.SOLO
+
+    def artists_involved(self) -> set[str]:
+        return {self.artist} if self.artist else set()
+
+    def role_of(self, artist_slug: str) -> ArtistRole | None:
+        return ArtistRole.SOLO if self.artist == artist_slug else None
+
+    def get_summary(self, artists_by_slug: dict[str, Artist]) -> str:
+        artist_obj = artists_by_slug.get(self.artist)
+        return artist_obj.name if artist_obj else self.artist
+
+    def validate_specific_rules(self, venue: Venue) -> None:
+        if not (0 <= self.min_age <= 18):
+            raise ValueError(f"Minimum age must be between 0 and 18, got {self.min_age}.")
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "title": self.title,
+            "venue": self.venue,
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "duration_minutes": self.duration_minutes,
+            "description": self.description,
+            "artist": self.artist,
+            "min_age": self.min_age,
+        }
+
+    def to_view(
+        self,
+        venues_by_slug: dict[str, Venue],
+        artists_by_slug: dict[str, Artist],
+    ) -> dict:
+        view = super().to_view(venues_by_slug, artists_by_slug)
+        view["artist"] = self.artist
+        view["min_age"] = self.min_age
+        return view
+</file>
+
+<file path="models/performances/workshop.py">
+from dataclasses import dataclass, field
+
+from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
+from models.artist import Artist
+from models.performances.base import Performance
+from models.venue import Venue
+
+
+@dataclass
+class Workshop(Performance):
+    teacher: str = ""
+    max_participants: int = 0
+    participants: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.kind = PerformanceKind.WORKSHOP
+
+    def artists_involved(self) -> set[str]:
+        return {self.teacher} if self.teacher else set()
+
+    def role_of(self, artist_slug: str) -> ArtistRole | None:
+        return ArtistRole.TEACHER if self.teacher == artist_slug else None
+
+    def get_summary(self, artists_by_slug: dict[str, Artist]) -> str:
+        teacher_obj = artists_by_slug.get(self.teacher)
+        teacher_name = teacher_obj.name if teacher_obj else self.teacher
+        return f"with {teacher_name}, {len(self.participants)}/{self.max_participants} places taken"
+
+    def effective_capacity(self, venue: Venue) -> int:
+        return min(self.max_participants, venue.capacity)
+
+    def places_left(self, venue: Venue) -> int:
+        return max(0, self.effective_capacity(venue) - len(self.participants))
+
+    def register(self, participant_name: str, venue: Venue) -> None:
+        clean_name = participant_name.strip()
+        if not clean_name:
+            raise ValueError("Participant name cannot be empty.")
+        if clean_name in self.participants:
+            raise ValueError(f"'{clean_name}' is already registered for this workshop.")
+        if self.places_left(venue) <= 0:
+            raise ValueError("Workshop is full.")
+        self.participants.append(clean_name)
+
+    def unregister(self, participant_name: str) -> None:
+        clean_name = participant_name.strip()
+        if clean_name not in self.participants:
+            raise ValueError(f"'{clean_name}' is not registered for this workshop.")
+        self.participants.remove(clean_name)
+
+    def validate_specific_rules(self, venue: Venue) -> None:
+        if self.max_participants < 1:
+            raise ValueError(
+                f"A workshop must have at least 1 place, got {self.max_participants}."
+            )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "title": self.title,
+            "venue": self.venue,
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "duration_minutes": self.duration_minutes,
+            "description": self.description,
+            "teacher": self.teacher,
+            "max_participants": self.max_participants,
+            "participants": list(self.participants),
+        }
+
+    def to_view(
+        self,
+        venues_by_slug: dict[str, Venue],
+        artists_by_slug: dict[str, Artist],
+    ) -> dict:
+        view = super().to_view(venues_by_slug, artists_by_slug)
+        venue_obj = venues_by_slug.get(self.venue)
+        places = self.places_left(venue_obj) if venue_obj else 0
+
+        view["teacher"] = self.teacher
+        view["max_participants"] = self.max_participants
+        view["participants"] = list(self.participants)
+        view["places_left"] = places
+        return view
+</file>
+
+<file path="models/venue.py">
+from dataclasses import dataclass
+
+from helpers.slug import slugify
+
+
+@dataclass
+class Venue:
+    name: str
+    capacity: int
+    address: str
+
+    @property
+    def slug(self) -> str:
+        return slugify(self.name)
+
+    def to_dict(self) -> dict:
+        """Storage representation matching data/festival.json schema."""
+        return {
+            "name": self.name,
+            "capacity": self.capacity,
+            "address": self.address,
+        }
+
+    def to_view(self) -> dict:
+        """Public representation returned by the API."""
+        return {
+            "slug": self.slug,
+            "name": self.name,
+            "capacity": self.capacity,
+            "address": self.address,
+        }
+</file>
+
+<file path="tests/test_festival_rules.py">
+from datetime import date, datetime
+
+import pytest
+
+from models import Artist, Festival, Lineup, Performance, SoloShow, Venue, Workshop
+
+
+@pytest.fixture
+def festival() -> Festival:
+    venues = [
+        Venue(name="Grand Casino", capacity=650, address="Seafront"),
+        Venue(name="Le Kiosque", capacity=120, address="Promenade"),
+    ]
+    artists = [
+        Artist(name="Nora Lebrun"),
+        Artist(name="Max Pellerin"),
+        Artist(name="Tom Vasseur"),
+    ]
+    existing_performance = SoloShow(
+        title="Opening Solo",
+        venue="grand-casino",
+        start=datetime(2027, 6, 11, 20, 0),
+        duration_minutes=60,
+        artist="nora-lebrun",
+    )
+    return Festival(
+        name="Test Festival",
+        first_day=date(2027, 6, 10),
+        last_day=date(2027, 6, 13),
+        venues=venues,
+        artists=artists,
+        performances=[existing_performance],
+    )
+
+
+def test_cannot_instantiate_abstract_performance():
+    """Verify that Performance is abstract and cannot be instantiated directly."""
+    with pytest.raises(TypeError):
+        Performance(  # type: ignore[abstract]
+            title="Abstract Performance",
+            venue="le-kiosque",
+            start=datetime(2027, 6, 11, 10, 0),
+            duration_minutes=60,
+        )
+
+
+def test_venue_busy_conflict(festival: Festival):
+    """Refuse scheduling in the same venue within the 30-minute buffer."""
+    overlapping = SoloShow(
+        title="Conflict Show",
+        venue="grand-casino",
+        start=datetime(2027, 6, 11, 21, 15),  # 21:15 is inside the 30m buffer after 21:00
+        duration_minutes=45,
+        artist="max-pellerin",
+    )
+    with pytest.raises(ValueError, match="Grand Casino is busy"):
+        festival.add_performance(overlapping)
+
+
+def test_artist_busy_in_another_venue(festival: Festival):
+    """Refuse scheduling an artist if they are already on another stage within buffer."""
+    artist_conflict = SoloShow(
+        title="Different Venue Same Artist",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 11, 20, 30),
+        duration_minutes=30,
+        artist="nora-lebrun",
+    )
+    with pytest.raises(ValueError, match="Nora Lebrun is on stage"):
+        festival.add_performance(artist_conflict)
+
+
+def test_artist_busy_as_act_in_lineup(festival: Festival):
+    """Refuse if artist is involved as an act in a lineup."""
+    lineup = Lineup(
+        title="Lineup Night",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 11, 20, 0),
+        duration_minutes=60,
+        host="tom-vasseur",
+        acts=["nora-lebrun", "max-pellerin"],
+    )
+    with pytest.raises(ValueError, match="Nora Lebrun is on stage"):
+        festival.add_performance(lineup)
+
+
+def test_show_at_one_am_belongs_to_previous_day():
+    """A show starting at 01:00 on June 12 belongs to June 11's festival day."""
+    perf = SoloShow(
+        title="Late Show",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 12, 1, 0),
+        duration_minutes=60,
+        artist="max-pellerin",
+    )
+    assert perf.festival_day == date(2027, 6, 11)
+
+
+def test_day_outside_the_festival(festival: Festival):
+    """Refuse scheduling a performance outside the festival dates."""
+    outside_show = SoloShow(
+        title="Too Late",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 14, 10, 0),
+        duration_minutes=60,
+        artist="max-pellerin",
+    )
+    with pytest.raises(ValueError, match="not a day of the festival"):
+        festival.add_performance(outside_show)
+
+
+@pytest.mark.parametrize("duration", [0, 361])
+def test_invalid_duration_limits(festival: Festival, duration: int):
+    """Refuse duration < 1 or > 360."""
+    invalid_perf = SoloShow(
+        title="Bad Duration",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 11, 10, 0),
+        duration_minutes=duration,
+        artist="max-pellerin",
+    )
+    with pytest.raises(ValueError, match="Duration must be between 1 and 360"):
+        festival.add_performance(invalid_perf)
+
+
+def test_unknown_venue_or_artist(festival: Festival):
+    """Refuse unknown venue or artist slugs."""
+    unknown_venue = SoloShow(
+        title="Bad Venue",
+        venue="non-existent-hall",
+        start=datetime(2027, 6, 11, 10, 0),
+        duration_minutes=60,
+        artist="max-pellerin",
+    )
+    with pytest.raises(ValueError, match="Unknown venue"):
+        festival.add_performance(unknown_venue)
+
+    unknown_artist = SoloShow(
+        title="Bad Artist",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 11, 10, 0),
+        duration_minutes=60,
+        artist="unknown-ghost",
+    )
+    with pytest.raises(ValueError, match="Unknown artist"):
+        festival.add_performance(unknown_artist)
+
+
+def test_solo_min_age_validation(festival: Festival):
+    """Refuse solo shows with min_age outside 0-18."""
+    with pytest.raises(ValueError, match="Minimum age must be between 0 and 18"):
+        festival.add_performance(
+            SoloShow(
+                title="Bad Age Solo",
+                venue="le-kiosque",
+                start=datetime(2027, 6, 11, 10, 0),
+                duration_minutes=60,
+                artist="max-pellerin",
+                min_age=25,
+            )
+        )
+
+
+def test_lineup_minimum_acts(festival: Festival):
+    """Refuse lineups with fewer than 2 acts."""
+    with pytest.raises(ValueError, match="needs at least 2 acts"):
+        festival.add_performance(
+            Lineup(
+                title="Too Few Acts",
+                venue="le-kiosque",
+                start=datetime(2027, 6, 11, 10, 0),
+                duration_minutes=60,
+                host="tom-vasseur",
+                acts=["nora-lebrun"],
+            )
+        )
+
+
+def test_lineup_timing_formula(festival: Festival):
+    """A lineup with 3 acts requires: 3 * 10 + 2 * 3 = 36 minutes."""
+    festival._artists["artist-3"] = Artist(name="Artist Three")
+
+    lineup_35m = Lineup(
+        title="3 Acts in 35m",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 11, 10, 0),
+        duration_minutes=35,
+        host="tom-vasseur",
+        acts=["nora-lebrun", "max-pellerin", "artist-3"],
+    )
+    with pytest.raises(ValueError, match="requires at least 36 minutes"):
+        festival.add_performance(lineup_35m)
+
+    lineup_36m = Lineup(
+        title="3 Acts in 36m",
+        venue="le-kiosque",
+        start=datetime(2027, 6, 11, 10, 0),
+        duration_minutes=36,
+        host="tom-vasseur",
+        acts=["nora-lebrun", "max-pellerin", "artist-3"],
+    )
+    festival.add_performance(lineup_36m)
+    assert lineup_36m in festival.performances
+
+
+def test_workshop_bounded_by_venue_capacity(festival: Festival):
+    """Workshop available places are bounded by venue capacity."""
+    grand_casino = festival.venues_by_slug["grand-casino"]  # capacity 650
+    huge_workshop = Workshop(
+        title="Huge Improv",
+        venue="grand-casino",
+        start=datetime(2027, 6, 12, 10, 0),
+        duration_minutes=60,
+        teacher="nora-lebrun",
+        max_participants=999,
+    )
+    assert huge_workshop.effective_capacity(grand_casino) == 650
+
+
+def test_workshop_at_least_one_place(festival: Festival):
+    """A workshop must specify at least 1 participant place."""
+    with pytest.raises(ValueError, match="at least 1 place"):
+        festival.add_performance(
+            Workshop(
+                title="Zero Places",
+                venue="le-kiosque",
+                start=datetime(2027, 6, 11, 10, 0),
+                duration_minutes=60,
+                teacher="nora-lebrun",
+                max_participants=0,
+            )
+        )
+</file>
+
+<file path="config/__init__.py">
+from config.constants import (
+    API_TITLE,
+    BUFFER_GAP,
+    BUFFER_MINUTES,
+    DATETIME_FORMAT,
+    DATE_FORMAT,
+    DEFAULT_DATA_PATH,
+    DEFAULT_SERVER_HOST,
+    DEFAULT_SERVER_PORT,
+    FESTIVAL_DAY_CUTOFF_HOURS,
+    FESTIVAL_DAY_OFFSET,
+    MAX_DURATION_MINUTES,
+    MAX_UPCOMING_PREVIEWS,
+    MIN_DURATION_MINUTES,
+    PERFORMANCE_ID_FORMAT,
+    STATIC_DIR,
+    TIME_FORMAT,
+)
+from config.enums import ArtistRole, PerformanceKind
+
+__all__ = [
+    "DEFAULT_DATA_PATH",
+    "STATIC_DIR",
+    "FESTIVAL_DAY_CUTOFF_HOURS",
+    "FESTIVAL_DAY_OFFSET",
+    "BUFFER_MINUTES",
+    "BUFFER_GAP",
+    "MIN_DURATION_MINUTES",
+    "MAX_DURATION_MINUTES",
+    "MAX_UPCOMING_PREVIEWS",
+    "DATE_FORMAT",
+    "TIME_FORMAT",
+    "DATETIME_FORMAT",
+    "PERFORMANCE_ID_FORMAT",
+    "DEFAULT_SERVER_HOST",
+    "DEFAULT_SERVER_PORT",
+    "API_TITLE",
+    "PerformanceKind",
+    "ArtistRole",
+]
+</file>
+
+<file path="config/constants.py">
+from datetime import timedelta
+from pathlib import Path
+
+# Paths
+DEFAULT_DATA_PATH = Path("data/festival.json")
+STATIC_DIR = Path("web/public")
+
+# Business Rules & Buffer Offsets
+FESTIVAL_DAY_CUTOFF_HOURS = 6
+FESTIVAL_DAY_OFFSET = timedelta(hours=FESTIVAL_DAY_CUTOFF_HOURS)
+
+BUFFER_MINUTES = 30
+BUFFER_GAP = timedelta(minutes=BUFFER_MINUTES)
+
+MIN_DURATION_MINUTES = 1
+MAX_DURATION_MINUTES = 360
+
+MAX_UPCOMING_PREVIEWS = 3
+
+# String & Date Formats
+DATE_FORMAT = "%Y-%m-%d"
+TIME_FORMAT = "%H:%M"
+DATETIME_FORMAT = f"{DATE_FORMAT}T{TIME_FORMAT}"
+PERFORMANCE_ID_FORMAT = "%Y-%m-%d-%H%M"
+
+# Server & CLI Defaults
+DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SERVER_PORT = 8000
+
+# API Metadata
+API_TITLE = "Deauville Festival du Rire API"
+</file>
+
+<file path="helpers/formatters.py">
+from config import MAX_UPCOMING_PREVIEWS, ArtistRole
+from helpers.data import get_venue_map
+from helpers.slug import slugify
+from helpers.time import (
+    parse_date,
+    parse_datetime,
+    performance_end,
+    performance_festival_day,
+    performance_start,
+)
+
+
+def format_summary(festival: dict) -> str:
+    name = festival["name"]
+    first = festival["first_day"]
+    last = festival["last_day"]
+    venues = len(festival["venues"])
+    artists = len(festival["artists"])
+    performances = len(festival["performances"])
+    return (
+        f"{name}\n"
+        f"From {first} to {last}\n"
+        f"{venues} venues, {artists} artists, {performances} performances"
+    )
+
+
+def format_venues(festival: dict) -> str:
+    lines = []
+    total_seats = 0
+    for venue in festival["venues"]:
+        slug = slugify(venue["name"])
+        seats = venue["capacity"]
+        total_seats += seats
+        lines.append(f"{slug}: {venue['name']}, {seats} seats")
+    lines.append(f"Total: {total_seats} seats")
+    return "\n".join(lines)
+
+
+def format_programme(festival: dict, day_str: str) -> str:
+    target_day = parse_date(day_str)
+    venue_map = get_venue_map(festival)
+
+    matching = [
+        perf
+        for perf in festival["performances"]
+        if performance_festival_day(perf) == target_day
+    ]
+    matching.sort(key=performance_start)
+
+    lines = [f"Programme for {target_day:%A %d %B}:"]
+    for perf in matching:
+        start = performance_start(perf)
+        end = performance_end(perf)
+        venue_name = venue_map.get(perf["venue"], perf["venue"])
+        lines.append(
+            f"{start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({perf['kind']})"
+        )
+    return "\n".join(lines)
+
+
+def format_artist_schedule(festival: dict, artist_slug: str) -> str:
+    artist_name = None
+    for artist in festival["artists"]:
+        if slugify(artist["name"]) == artist_slug:
+            artist_name = artist["name"]
+            break
+
+    if artist_name is None:
+        return f"No artist '{artist_slug}'."
+
+    venue_map = get_venue_map(festival)
+    lines = [artist_name]
+
+    matching = []
+    for perf in festival["performances"]:
+        role = None
+        if perf.get("artist") == artist_slug:
+            role = ArtistRole.SOLO
+        elif perf.get("host") == artist_slug:
+            role = ArtistRole.HOST
+        elif artist_slug in perf.get("acts", []):
+            role = ArtistRole.ACT
+        elif perf.get("teacher") == artist_slug:
+            role = ArtistRole.TEACHER
+
+        if role:
+            matching.append((perf, role.value))
+
+    matching.sort(key=lambda item: performance_start(item[0]))
+
+    for perf, role_str in matching:
+        start = performance_start(perf)
+        end = performance_end(perf)
+        day_date = performance_festival_day(perf)
+        day_label = f"{day_date:%a} {day_date.day}"
+        venue_name = venue_map.get(perf["venue"], perf["venue"])
+        lines.append(
+            f"{day_label} {start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({role_str})"
+        )
+
+    return "\n".join(lines)
+
+
+def format_now(festival: dict, moment_str: str) -> str:
+    at = parse_datetime(moment_str)
+    venue_map = get_venue_map(festival)
+
+    currently_playing = []
+    upcoming = []
+
+    for perf in festival["performances"]:
+        start = performance_start(perf)
+        end = performance_end(perf)
+        if start <= at < end:
+            currently_playing.append(perf)
+        elif at <= start:
+            upcoming.append(perf)
+
+    upcoming.sort(key=performance_start)
+    next_up = upcoming[:MAX_UPCOMING_PREVIEWS]
+
+    lines = [f"On stage at {at:%Y-%m-%d %H:%M}:"]
+    for perf in currently_playing:
+        end = performance_end(perf)
+        venue_name = venue_map.get(perf["venue"], perf["venue"])
+        lines.append(f"- {perf['title']} at {venue_name}, until {end:%H:%M}")
+
+    if next_up:
+        lines.append("Up next:")
+        for perf in next_up:
+            start = performance_start(perf)
+            end = performance_end(perf)
+            venue_name = venue_map.get(perf["venue"], perf["venue"])
+            lines.append(
+                f"- {start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({perf['kind']})"
+            )
+
+    return "\n".join(lines)
+
+
+def format_usage() -> str:
+    return (
+        "Usage:\n"
+        "  uv run main.py\n"
+        "  uv run main.py venues\n"
+        "  uv run main.py programme <YYYY-MM-DD>\n"
+        "  uv run main.py artist <artist-slug>\n"
+        "  uv run main.py now <YYYY-MM-DDTHH:MM>\n"
+        "  uv run main.py add\n"
+        "  uv run main.py cancel <ID>"
+    )
+</file>
+
+<file path="models/__init__.py">
+from models.artist import Artist
+from models.festival import Festival
+from models.performances import Lineup, Performance, SoloShow, Workshop
+from models.venue import Venue
+
+__all__ = [
+    "Venue",
+    "Artist",
+    "Performance",
+    "SoloShow",
+    "Lineup",
+    "Workshop",
+    "Festival",
+]
+</file>
+
+<file path="models/artist.py">
+from dataclasses import dataclass
+
+from helpers.slug import slugify
+
+
+@dataclass
+class Artist:
+    name: str
+    bio: str = ""
+    photo_url: str = ""
+
+    @property
+    def slug(self) -> str:
+        return slugify(self.name)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Artist):
+            return False
+        return self.slug == other.slug
+
+    def to_dict(self) -> dict:
+        """Storage representation matching data/festival.json schema."""
+        return {
+            "name": self.name,
+            "bio": self.bio,
+            "photo_url": self.photo_url,
+        }
+
+    def to_view(self) -> dict:
+        """Public representation returned by the API."""
+        return {
+            "slug": self.slug,
+            "name": self.name,
+            "bio": self.bio,
+            "photo_url": self.photo_url,
+        }
+</file>
+
+<file path="models/festival.py">
+from datetime import date, datetime, timedelta
+
+from config import (
+    BUFFER_GAP,
+    DATE_FORMAT,
+    MAX_DURATION_MINUTES,
+    MAX_UPCOMING_PREVIEWS,
+    MIN_DURATION_MINUTES,
+    ArtistRole,
+)
+from models.artist import Artist
+from models.performances import Performance, Workshop
+from models.venue import Venue
+
+
+class Festival:
+    def __init__(
+        self,
+        name: str,
+        first_day: date,
+        last_day: date,
+        venues: list[Venue] | None = None,
+        artists: list[Artist] | None = None,
+        performances: list[Performance] | None = None,
+    ) -> None:
+        self.name = name
+        self.first_day = first_day
+        self.last_day = last_day
+        self._venues: dict[str, Venue] = {v.slug: v for v in (venues or [])}
+        self._artists: dict[str, Artist] = {a.slug: a for a in (artists or [])}
+        self._performances: list[Performance] = []
+
+        for p in performances or []:
+            self.add_performance(p, enforce_rules=False)
+
+    @property
+    def venues_by_slug(self) -> dict[str, Venue]:
+        return dict(self._venues)
+
+    @property
+    def artists_by_slug(self) -> dict[str, Artist]:
+        return dict(self._artists)
+
+    @property
+    def performances(self) -> list[Performance]:
+        return list(self._performances)
+
+    @property
+    def performances_by_id(self) -> dict[str, Performance]:
+        return {p.id: p for p in self._performances}
+
+    @property
+    def days(self) -> list[date]:
+        day_list = []
+        current = self.first_day
+        while current <= self.last_day:
+            day_list.append(current)
+            current += timedelta(days=1)
+        return day_list
+
+    def validate_new_performance(self, performance: Performance) -> None:
+        if performance.venue not in self._venues:
+            raise ValueError(f"Unknown venue '{performance.venue}'.")
+
+        venue_obj = self._venues[performance.venue]
+
+        for artist_slug in performance.artists_involved():
+            if artist_slug not in self._artists:
+                raise ValueError(f"Unknown artist '{artist_slug}'.")
+
+        if not (MIN_DURATION_MINUTES <= performance.duration_minutes <= MAX_DURATION_MINUTES):
+            raise ValueError(
+                f"Duration must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes, got {performance.duration_minutes}."
+            )
+
+        if not (self.first_day <= performance.festival_day <= self.last_day):
+            raise ValueError(f"{performance.festival_day} is not a day of the festival.")
+
+        # Polymorphic check on specific rules
+        performance.validate_specific_rules(venue_obj)
+
+        new_start = performance.start
+        new_end = performance.end
+        new_artists = performance.artists_involved()
+
+        for other in self._performances:
+            conflict = (new_start < other.end + BUFFER_GAP) and (
+                other.start < new_end + BUFFER_GAP
+            )
+            if not conflict:
+                continue
+
+            if other.venue == performance.venue:
+                venue_name = venue_obj.name
+                raise ValueError(
+                    f"{venue_name} is busy with {other.title} "
+                    f"({other.start:%Y-%m-%d %H:%M}-{other.end:%H:%M})."
+                )
+
+            shared_artists = new_artists.intersection(other.artists_involved())
+            if shared_artists:
+                artist_slug = next(iter(shared_artists))
+                artist_name = self._artists[artist_slug].name
+                raise ValueError(f"{artist_name} is on stage in {other.title}.")
+
+    def add_performance(self, performance: Performance, enforce_rules: bool = True) -> None:
+        if enforce_rules:
+            self.validate_new_performance(performance)
+        self._performances.append(performance)
+
+    def cancel_performance(self, performance_id: str) -> Performance:
+        for idx, perf in enumerate(self._performances):
+            if perf.id == performance_id:
+                return self._performances.pop(idx)
+        raise ValueError(f"No performance with id '{performance_id}'.")
+
+    def register_workshop(self, performance_id: str, participant_name: str) -> Workshop:
+        perf = self.performances_by_id.get(performance_id)
+        if not perf:
+            raise KeyError(f"No performance '{performance_id}'.")
+        if not isinstance(perf, Workshop):
+            raise TypeError(f"Performance '{performance_id}' is not a workshop.")
+
+        venue = self._venues.get(perf.venue)
+        if not venue:
+            raise ValueError(f"Unknown venue '{perf.venue}'.")
+
+        perf.register(participant_name, venue)
+        return perf
+
+    def programme(
+        self,
+        day: date | None = None,
+        venue_slug: str | None = None,
+    ) -> list[Performance]:
+        if venue_slug and venue_slug not in self._venues:
+            raise ValueError(f"No venue '{venue_slug}'.")
+
+        matching = self._performances
+        if day:
+            matching = [p for p in matching if p.festival_day == day]
+        if venue_slug:
+            matching = [p for p in matching if p.venue == venue_slug]
+
+        return sorted(matching)
+
+    def artist_schedule(self, artist_slug: str) -> tuple[Artist, list[tuple[Performance, ArtistRole]]]:
+        if artist_slug not in self._artists:
+            raise ValueError(f"No artist '{artist_slug}'.")
+
+        artist = self._artists[artist_slug]
+        schedule = []
+        for p in self._performances:
+            role = p.role_of(artist_slug)
+            if role:
+                schedule.append((p, role))
+
+        schedule.sort(key=lambda item: item[0].start)
+        return artist, schedule
+
+    def now(self, moment: datetime) -> tuple[list[Performance], list[Performance]]:
+        currently_playing = []
+        upcoming = []
+
+        for p in self._performances:
+            if p.start <= moment < p.end:
+                currently_playing.append(p)
+            elif moment <= p.start:
+                upcoming.append(p)
+
+        upcoming.sort()
+        return currently_playing, upcoming[:MAX_UPCOMING_PREVIEWS]
+
+    def to_dict(self) -> dict:
+        """Serialize complete festival state into JSON schema format."""
+        return {
+            "name": self.name,
+            "first_day": self.first_day.strftime(DATE_FORMAT),
+            "last_day": self.last_day.strftime(DATE_FORMAT),
+            "venues": [v.to_dict() for v in self._venues.values()],
+            "artists": [a.to_dict() for a in self._artists.values()],
+            "performances": [p.to_dict() for p in self._performances],
+        }
 </file>
 
 <file path="pyproject.toml">
@@ -3951,11 +6097,208 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "fastapi>=0.143.0",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 </file>
 
-<file path="README.md">
+<file path="api.py">
+from datetime import date, datetime
 
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+
+from config import API_TITLE, DATE_FORMAT, STATIC_DIR
+from helpers import load_festival_aggregate, save_festival
+from schemas import WorkshopRegistrationRequest
+
+app = FastAPI(title=API_TITLE)
+
+
+@app.get("/api/festival")
+def read_festival() -> dict:
+    festival = load_festival_aggregate()
+    return {
+        "name": festival.name,
+        "first_day": festival.first_day.strftime(DATE_FORMAT),
+        "last_day": festival.last_day.strftime(DATE_FORMAT),
+        "days": [d.strftime(DATE_FORMAT) for d in festival.days],
+    }
+
+
+@app.get("/api/venues")
+def list_venues() -> list[dict]:
+    festival = load_festival_aggregate()
+    return [v.to_view() for v in festival.venues_by_slug.values()]
+
+
+@app.get("/api/artists")
+def list_artists() -> list[dict]:
+    festival = load_festival_aggregate()
+    sorted_artists = sorted(festival.artists_by_slug.values(), key=lambda a: a.slug)
+    return [a.to_view() for a in sorted_artists]
+
+
+@app.get("/api/programme")
+def read_programme(day: date | None = None, venue: str | None = None) -> list[dict]:
+    festival = load_festival_aggregate()
+    try:
+        matching = festival.programme(day=day, venue_slug=venue)
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from None
+
+    return [p.to_view(festival.venues_by_slug, festival.artists_by_slug) for p in matching]
+
+
+@app.get("/api/now")
+def read_now(at: datetime | None = None) -> dict:
+    festival = load_festival_aggregate()
+    query_time = at or datetime.now()
+    now_playing, up_next = festival.now(query_time)
+
+    return {
+        "now_playing": [
+            p.to_view(festival.venues_by_slug, festival.artists_by_slug)
+            for p in now_playing
+        ],
+        "up_next": [
+            p.to_view(festival.venues_by_slug, festival.artists_by_slug)
+            for p in up_next
+        ],
+    }
+
+
+@app.get("/api/performances/{perf_id}")
+def read_performance(perf_id: str) -> dict:
+    festival = load_festival_aggregate()
+    perf = festival.performances_by_id.get(perf_id)
+    if not perf:
+        raise HTTPException(status_code=404, detail=f"No performance '{perf_id}'.")
+    return perf.to_view(festival.venues_by_slug, festival.artists_by_slug)
+
+
+@app.post("/api/performances/{perf_id}/register")
+def register_for_workshop(perf_id: str, payload: WorkshopRegistrationRequest) -> dict:
+    festival = load_festival_aggregate()
+    try:
+        workshop = festival.register_workshop(perf_id, payload.name)
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail=str(err).strip("'\"")) from None
+    except TypeError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+
+    save_festival(festival)
+    return workshop.to_view(festival.venues_by_slug, festival.artists_by_slug)
+
+
+@app.get("/api/artists/{slug}")
+def read_artist(slug: str) -> dict:
+    festival = load_festival_aggregate()
+    try:
+        artist, schedule = festival.artist_schedule(slug)
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from None
+
+    result = artist.to_view()
+    result["performances"] = [
+        p.to_view(festival.venues_by_slug, festival.artists_by_slug)
+        for p, _ in schedule
+    ]
+    return result
+
+
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True))
+</file>
+
+<file path="helpers/__init__.py">
+from helpers.data import (
+    load_festival,
+    load_festival_aggregate,
+    save_festival,
+)
+from helpers.formatters import (
+    format_artist_schedule,
+    format_now,
+    format_programme,
+    format_summary,
+    format_usage,
+    format_venues,
+)
+from helpers.rules import get_performance_id, validate_performance
+
+__all__ = [
+    "load_festival",
+    "save_festival",
+    "load_festival_aggregate",
+    "format_summary",
+    "format_venues",
+    "format_programme",
+    "format_artist_schedule",
+    "format_now",
+    "format_usage",
+    "validate_performance",
+    "get_performance_id",
+]
+</file>
+
+<file path="helpers/data.py">
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from config import DEFAULT_DATA_PATH
+from helpers.slug import slugify
+
+if TYPE_CHECKING:
+    from models import Festival
+
+
+def load_festival(path: Path = DEFAULT_DATA_PATH) -> dict:
+    from repositories import FestivalRepository
+
+    return FestivalRepository(path).load_raw()
+
+
+def save_festival(festival_or_dict: Any, path: Path = DEFAULT_DATA_PATH) -> None:
+    from repositories import FestivalRepository
+
+    FestivalRepository(path).save_festival(festival_or_dict)
+
+
+def load_festival_aggregate(path: Path = DEFAULT_DATA_PATH) -> Festival:
+    from repositories import FestivalRepository
+
+    return FestivalRepository(path).get_festival()
+
+
+def get_venue_map(festival: dict) -> dict[str, str]:
+    return {slugify(venue["name"]): venue["name"] for venue in festival["venues"]}
+
+
+def get_artist_map(festival: dict) -> dict[str, str]:
+    return {slugify(artist["name"]): artist["name"] for artist in festival["artists"]}
+</file>
+
+<file path="main.py">
+from cli import run_cli
+
+if __name__ == "__main__":
+    run_cli()
 </file>
 
 </files>

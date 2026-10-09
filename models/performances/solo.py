@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
 from models.artist import Artist
+from models.exceptions import ValidationError
 from models.performances.base import Performance
 from models.venue import Venue
 
@@ -27,7 +28,9 @@ class SoloShow(Performance):
 
     def validate_specific_rules(self, venue: Venue) -> None:
         if not (0 <= self.min_age <= 18):
-            raise ValueError(f"Minimum age must be between 0 and 18, got {self.min_age}.")
+            raise ValidationError(
+                f"Minimum age must be between 0 and 18, got {self.min_age}."
+            )
 
     def to_dict(self) -> dict:
         return {

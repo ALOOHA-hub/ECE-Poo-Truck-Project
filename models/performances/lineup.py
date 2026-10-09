@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
 from models.artist import Artist
+from models.exceptions import ValidationError
 from models.performances.base import Performance
 from models.venue import Venue
 
@@ -38,15 +39,15 @@ class Lineup(Performance):
 
     def validate_specific_rules(self, venue: Venue) -> None:
         if len(self.acts) < 2:
-            raise ValueError(f"A lineup needs at least 2 acts, got {len(self.acts)}.")
+            raise ValidationError(f"A lineup needs at least 2 acts, got {len(self.acts)}.")
         if len(self.acts) != len(set(self.acts)):
-            raise ValueError("A lineup cannot have duplicate acts.")
+            raise ValidationError("A lineup cannot have duplicate acts.")
         if self.host in self.acts:
-            raise ValueError(f"The host '{self.host}' cannot also be an act.")
+            raise ValidationError(f"The host '{self.host}' cannot also be an act.")
 
         min_time = len(self.acts) * 10 + (len(self.acts) - 1) * 3
         if self.duration_minutes < min_time:
-            raise ValueError(
+            raise ValidationError(
                 f"Lineup with {len(self.acts)} acts requires at least {min_time} minutes, got {self.duration_minutes}."
             )
 
@@ -69,5 +70,5 @@ class Lineup(Performance):
     ) -> dict:
         view = super().to_view(venues_by_slug, artists_by_slug)
         view["host"] = self.host
-        view["acts"] = self.acts
+        view["acts"] = list(self.acts)
         return view

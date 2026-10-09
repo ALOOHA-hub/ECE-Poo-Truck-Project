@@ -9,11 +9,19 @@ from config import (
     ArtistRole,
 )
 from models.artist import Artist
+from models.exceptions import (
+    ConflictError,
+    InvalidPerformanceTypeError,
+    NotFoundError,
+    ValidationError,
+)
 from models.performances import Performance, Workshop
 from models.venue import Venue
 
 
 class Festival:
+    """Aggregate root managing festival entities and scheduling invariants."""
+
     def __init__(
         self,
         name: str,
@@ -58,25 +66,35 @@ class Festival:
             current += timedelta(days=1)
         return day_list
 
-    def validate_new_performance(self, performance: Performance) -> None:
+    def add_artist(self, artist: Artist) -> None:
+        """Register a new artist; raises ConflictError if slug already exists."""
+        if artist.slug in self._artists:
+            raise ConflictError(f"Artist '{artist.slug}' already exists.")
+        self._artists[artist.slug] = artist
+
+    def validate_new_performance(
+        self,
+        performance: Performance,
+        ignore_id: str | None = None,
+    ) -> None:
+        """Ensure all buffer requirements and limits are met."""
         if performance.venue not in self._venues:
-            raise ValueError(f"Unknown venue '{performance.venue}'.")
+            raise ValidationError(f"Unknown venue '{performance.venue}'.")
 
         venue_obj = self._venues[performance.venue]
 
         for artist_slug in performance.artists_involved():
             if artist_slug not in self._artists:
-                raise ValueError(f"Unknown artist '{artist_slug}'.")
+                raise ValidationError(f"Unknown artist '{artist_slug}'.")
 
         if not (MIN_DURATION_MINUTES <= performance.duration_minutes <= MAX_DURATION_MINUTES):
-            raise ValueError(
+            raise ValidationError(
                 f"Duration must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes, got {performance.duration_minutes}."
             )
 
         if not (self.first_day <= performance.festival_day <= self.last_day):
-            raise ValueError(f"{performance.festival_day} is not a day of the festival.")
+            raise ValidationError(f"{performance.festival_day} is not a day of the festival.")
 
-        # Polymorphic check on specific rules
         performance.validate_specific_rules(venue_obj)
 
         new_start = performance.start
@@ -84,6 +102,9 @@ class Festival:
         new_artists = performance.artists_involved()
 
         for other in self._performances:
+            if ignore_id and other.id == ignore_id:
+                continue
+
             conflict = (new_start < other.end + BUFFER_GAP) and (
                 other.start < new_end + BUFFER_GAP
             )
@@ -92,7 +113,7 @@ class Festival:
 
             if other.venue == performance.venue:
                 venue_name = venue_obj.name
-                raise ValueError(
+                raise ConflictError(
                     f"{venue_name} is busy with {other.title} "
                     f"({other.start:%Y-%m-%d %H:%M}-{other.end:%H:%M})."
                 )
@@ -101,29 +122,52 @@ class Festival:
             if shared_artists:
                 artist_slug = next(iter(shared_artists))
                 artist_name = self._artists[artist_slug].name
-                raise ValueError(f"{artist_name} is on stage in {other.title}.")
+                raise ConflictError(f"{artist_name} is on stage in {other.title}.")
 
     def add_performance(self, performance: Performance, enforce_rules: bool = True) -> None:
+        """Append a valid performance to the schedule."""
         if enforce_rules:
             self.validate_new_performance(performance)
         self._performances.append(performance)
 
     def cancel_performance(self, performance_id: str) -> Performance:
+        """Remove a performance by ID, raising NotFoundError if missing."""
         for idx, perf in enumerate(self._performances):
             if perf.id == performance_id:
                 return self._performances.pop(idx)
-        raise ValueError(f"No performance with id '{performance_id}'.")
+        raise NotFoundError(f"No performance '{performance_id}'.")
+
+    def update_performance(self, performance_id: str, new_perf: Performance) -> Performance:
+        """Atomically update a performance. If validation fails, original remains untouched."""
+        original_idx = None
+        for idx, p in enumerate(self._performances):
+            if p.id == performance_id:
+                original_idx = idx
+                break
+
+        if original_idx is None:
+            raise NotFoundError(f"No performance '{performance_id}'.")
+
+        original_perf = self._performances.pop(original_idx)
+        try:
+            self.validate_new_performance(new_perf)
+            self._performances.append(new_perf)
+            return new_perf
+        except Exception:
+            self._performances.insert(original_idx, original_perf)
+            raise
 
     def register_workshop(self, performance_id: str, participant_name: str) -> Workshop:
+        """Register a participant in a designated workshop."""
         perf = self.performances_by_id.get(performance_id)
         if not perf:
-            raise KeyError(f"No performance '{performance_id}'.")
+            raise NotFoundError(f"No performance '{performance_id}'.")
         if not isinstance(perf, Workshop):
-            raise TypeError(f"Performance '{performance_id}' is not a workshop.")
+            raise InvalidPerformanceTypeError(f"Performance '{performance_id}' is not a workshop.")
 
         venue = self._venues.get(perf.venue)
         if not venue:
-            raise ValueError(f"Unknown venue '{perf.venue}'.")
+            raise ValidationError(f"Unknown venue '{perf.venue}'.")
 
         perf.register(participant_name, venue)
         return perf
@@ -134,7 +178,7 @@ class Festival:
         venue_slug: str | None = None,
     ) -> list[Performance]:
         if venue_slug and venue_slug not in self._venues:
-            raise ValueError(f"No venue '{venue_slug}'.")
+            raise NotFoundError(f"No venue '{venue_slug}'.")
 
         matching = self._performances
         if day:
@@ -146,7 +190,7 @@ class Festival:
 
     def artist_schedule(self, artist_slug: str) -> tuple[Artist, list[tuple[Performance, ArtistRole]]]:
         if artist_slug not in self._artists:
-            raise ValueError(f"No artist '{artist_slug}'.")
+            raise NotFoundError(f"No artist '{artist_slug}'.")
 
         artist = self._artists[artist_slug]
         schedule = []
@@ -172,7 +216,6 @@ class Festival:
         return currently_playing, upcoming[:MAX_UPCOMING_PREVIEWS]
 
     def to_dict(self) -> dict:
-        """Serialize complete festival state into JSON schema format."""
         return {
             "name": self.name,
             "first_day": self.first_day.strftime(DATE_FORMAT),

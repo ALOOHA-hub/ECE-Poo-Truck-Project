@@ -4,6 +4,7 @@ from pathlib import Path
 # Paths
 DEFAULT_DATA_PATH = Path("data/festival.json")
 STATIC_DIR = Path("web/public")
+STATIC_ADMIN_DIR = Path("web/admin")
 
 # Business Rules & Buffer Offsets
 FESTIVAL_DAY_CUTOFF_HOURS = 6
@@ -22,6 +23,10 @@ DATE_FORMAT = "%Y-%m-%d"
 TIME_FORMAT = "%H:%M"
 DATETIME_FORMAT = f"{DATE_FORMAT}T{TIME_FORMAT}"
 PERFORMANCE_ID_FORMAT = "%Y-%m-%d-%H%M"
+
+# Server & CLI Defaults
+DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SERVER_PORT = 8000
 
 # API Metadata
 API_TITLE = "Deauville Festival du Rire API"

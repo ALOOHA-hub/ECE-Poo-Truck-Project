@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
 from models.artist import Artist
+from models.exceptions import ConflictError, ValidationError
 from models.performances.base import Performance
 from models.venue import Venue
 
@@ -9,7 +10,7 @@ from models.venue import Venue
 @dataclass
 class Workshop(Performance):
     teacher: str = ""
-    max_participants: int = 0
+    max_participants: int = 1
     participants: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -36,22 +37,22 @@ class Workshop(Performance):
     def register(self, participant_name: str, venue: Venue) -> None:
         clean_name = participant_name.strip()
         if not clean_name:
-            raise ValueError("Participant name cannot be empty.")
+            raise ValidationError("Participant name cannot be empty.")
         if clean_name in self.participants:
-            raise ValueError(f"'{clean_name}' is already registered for this workshop.")
+            raise ConflictError(f"'{clean_name}' is already registered for this workshop.")
         if self.places_left(venue) <= 0:
-            raise ValueError("Workshop is full.")
+            raise ConflictError("Workshop is full.")
         self.participants.append(clean_name)
 
     def unregister(self, participant_name: str) -> None:
         clean_name = participant_name.strip()
         if clean_name not in self.participants:
-            raise ValueError(f"'{clean_name}' is not registered for this workshop.")
+            raise ValidationError(f"'{clean_name}' is not registered for this workshop.")
         self.participants.remove(clean_name)
 
     def validate_specific_rules(self, venue: Venue) -> None:
         if self.max_participants < 1:
-            raise ValueError(
+            raise ValidationError(
                 f"A workshop must have at least 1 place, got {self.max_participants}."
             )
 

@@ -1,7 +1,14 @@
 from models.artist import Artist
-from models.festival import Festival
+from models.exceptions import (
+    ConflictError,
+    FestivalError,
+    InvalidPerformanceTypeError,
+    NotFoundError,
+    ValidationError,
+)
 from models.performances import Lineup, Performance, SoloShow, Workshop
 from models.venue import Venue
+from models.festival import Festival
 
 __all__ = [
     "Venue",
@@ -11,4 +18,9 @@ __all__ = [
     "Lineup",
     "Workshop",
     "Festival",
+    "FestivalError",
+    "NotFoundError",
+    "ConflictError",
+    "ValidationError",
+    "InvalidPerformanceTypeError",
 ]
