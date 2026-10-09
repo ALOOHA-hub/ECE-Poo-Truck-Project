@@ -1,6 +1,4 @@
 from datetime import date, datetime, timedelta
-from dataclasses import dataclass
-from helpers.slug import slugify
 
 from config import (
     BUFFER_GAP,
@@ -10,7 +8,7 @@ from config import (
     ArtistRole,
 )
 from models.artist import Artist
-from models.performance import Performance
+from models.performances import Performance
 from models.venue import Venue
 
 
@@ -60,25 +58,26 @@ class Festival:
         return day_list
 
     def validate_new_performance(self, performance: Performance) -> None:
-        # 1. Venue & artist validity
         if performance.venue not in self._venues:
             raise ValueError(f"Unknown venue '{performance.venue}'.")
+
+        venue_obj = self._venues[performance.venue]
 
         for artist_slug in performance.artists_involved():
             if artist_slug not in self._artists:
                 raise ValueError(f"Unknown artist '{artist_slug}'.")
 
-        # 2. Duration limits
         if not (MIN_DURATION_MINUTES <= performance.duration_minutes <= MAX_DURATION_MINUTES):
             raise ValueError(
                 f"Duration must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes, got {performance.duration_minutes}."
             )
 
-        # 3. Festival date boundaries
         if not (self.first_day <= performance.festival_day <= self.last_day):
             raise ValueError(f"{performance.festival_day} is not a day of the festival.")
 
-        # 4. 30-minute buffer checks for venue and artists
+        # Polymorphic check: calls SoloShow, Lineup, or Workshop validation
+        performance.validate_specific_rules(venue_obj)
+
         new_start = performance.start
         new_end = performance.end
         new_artists = performance.artists_involved()
@@ -91,7 +90,7 @@ class Festival:
                 continue
 
             if other.venue == performance.venue:
-                venue_name = self._venues[performance.venue].name
+                venue_name = venue_obj.name
                 raise ValueError(
                     f"{venue_name} is busy with {other.title} "
                     f"({other.start:%Y-%m-%d %H:%M}-{other.end:%H:%M})."
