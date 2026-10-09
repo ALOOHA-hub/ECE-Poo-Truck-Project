@@ -20,6 +20,7 @@ MAX_UPCOMING_PREVIEWS = 3
 # String & Date Formats
 DATE_FORMAT = "%Y-%m-%d"
 TIME_FORMAT = "%H:%M"
+DATETIME_FORMAT = f"{DATE_FORMAT}T{TIME_FORMAT}"
 PERFORMANCE_ID_FORMAT = "%Y-%m-%d-%H%M"
 
 # API Metadata

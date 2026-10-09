@@ -14,6 +14,15 @@ class Venue:
         return slugify(self.name)
 
     def to_dict(self) -> dict:
+        """Storage representation matching data/festival.json schema."""
+        return {
+            "name": self.name,
+            "capacity": self.capacity,
+            "address": self.address,
+        }
+
+    def to_view(self) -> dict:
+        """Public representation returned by the API."""
         return {
             "slug": self.slug,
             "name": self.name,

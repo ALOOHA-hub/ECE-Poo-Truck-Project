@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from dataclasses import dataclass
+
 from helpers.slug import slugify
 
 
@@ -19,6 +19,15 @@ class Artist:
         return self.slug == other.slug
 
     def to_dict(self) -> dict:
+        """Storage representation matching data/festival.json schema."""
+        return {
+            "name": self.name,
+            "bio": self.bio,
+            "photo_url": self.photo_url,
+        }
+
+    def to_view(self) -> dict:
+        """Public representation returned by the API."""
         return {
             "slug": self.slug,
             "name": self.name,

@@ -2,13 +2,14 @@ from datetime import date, datetime, timedelta
 
 from config import (
     BUFFER_GAP,
+    DATE_FORMAT,
     MAX_DURATION_MINUTES,
     MAX_UPCOMING_PREVIEWS,
     MIN_DURATION_MINUTES,
     ArtistRole,
 )
 from models.artist import Artist
-from models.performances import Performance
+from models.performances import Performance, Workshop
 from models.venue import Venue
 
 
@@ -75,7 +76,7 @@ class Festival:
         if not (self.first_day <= performance.festival_day <= self.last_day):
             raise ValueError(f"{performance.festival_day} is not a day of the festival.")
 
-        # Polymorphic check: calls SoloShow, Lineup, or Workshop validation
+        # Polymorphic check on specific rules
         performance.validate_specific_rules(venue_obj)
 
         new_start = performance.start
@@ -112,6 +113,20 @@ class Festival:
             if perf.id == performance_id:
                 return self._performances.pop(idx)
         raise ValueError(f"No performance with id '{performance_id}'.")
+
+    def register_workshop(self, performance_id: str, participant_name: str) -> Workshop:
+        perf = self.performances_by_id.get(performance_id)
+        if not perf:
+            raise KeyError(f"No performance '{performance_id}'.")
+        if not isinstance(perf, Workshop):
+            raise TypeError(f"Performance '{performance_id}' is not a workshop.")
+
+        venue = self._venues.get(perf.venue)
+        if not venue:
+            raise ValueError(f"Unknown venue '{perf.venue}'.")
+
+        perf.register(participant_name, venue)
+        return perf
 
     def programme(
         self,
@@ -155,3 +170,14 @@ class Festival:
 
         upcoming.sort()
         return currently_playing, upcoming[:MAX_UPCOMING_PREVIEWS]
+
+    def to_dict(self) -> dict:
+        """Serialize complete festival state into JSON schema format."""
+        return {
+            "name": self.name,
+            "first_day": self.first_day.strftime(DATE_FORMAT),
+            "last_day": self.last_day.strftime(DATE_FORMAT),
+            "venues": [v.to_dict() for v in self._venues.values()],
+            "artists": [a.to_dict() for a in self._artists.values()],
+            "performances": [p.to_dict() for p in self._performances],
+        }

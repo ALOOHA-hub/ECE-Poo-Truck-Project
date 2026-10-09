@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from config import ArtistRole, PerformanceKind
+from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
 from models.artist import Artist
 from models.performances.base import Performance
 from models.venue import Venue
@@ -8,8 +8,6 @@ from models.venue import Venue
 
 @dataclass
 class SoloShow(Performance):
-    """Solo stand-up performance by a single artist."""
-
     artist: str = ""
     min_age: int = 0
 
@@ -30,6 +28,18 @@ class SoloShow(Performance):
     def validate_specific_rules(self, venue: Venue) -> None:
         if not (0 <= self.min_age <= 18):
             raise ValueError(f"Minimum age must be between 0 and 18, got {self.min_age}.")
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "title": self.title,
+            "venue": self.venue,
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "duration_minutes": self.duration_minutes,
+            "description": self.description,
+            "artist": self.artist,
+            "min_age": self.min_age,
+        }
 
     def to_view(
         self,

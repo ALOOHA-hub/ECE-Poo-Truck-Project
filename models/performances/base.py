@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 from config import (
     DATE_FORMAT,
+    DATETIME_FORMAT,
     FESTIVAL_DAY_OFFSET,
     PERFORMANCE_ID_FORMAT,
     TIME_FORMAT,
@@ -16,8 +17,6 @@ from models.venue import Venue
 
 @dataclass
 class Performance(ABC):
-    """Abstract base class for all festival performance kinds."""
-
     title: str
     venue: str  # venue slug
     start: datetime
@@ -64,6 +63,10 @@ class Performance(ABC):
     def validate_specific_rules(self, venue: Venue) -> None:
         """Check validation constraints unique to this performance kind."""
 
+    @abstractmethod
+    def to_dict(self) -> dict:
+        """Serialize domain model to raw storage dictionary for data/festival.json."""
+
     def to_view(
         self,
         venues_by_slug: dict[str, Venue],
@@ -79,8 +82,8 @@ class Performance(ABC):
             "title": self.title,
             "venue": self.venue,
             "venue_name": venue_name,
-            "start": self.start.strftime(f"{DATE_FORMAT}T{TIME_FORMAT}"),
-            "end": self.end.strftime(f"{DATE_FORMAT}T{TIME_FORMAT}"),
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "end": self.end.strftime(DATETIME_FORMAT),
             "duration_minutes": self.duration_minutes,
             "festival_day": self.festival_day.strftime(DATE_FORMAT),
             "description": self.description,

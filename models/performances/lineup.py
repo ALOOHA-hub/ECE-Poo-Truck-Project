@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from config import ArtistRole, PerformanceKind
+from config import DATETIME_FORMAT, ArtistRole, PerformanceKind
 from models.artist import Artist
 from models.performances.base import Performance
 from models.venue import Venue
@@ -8,8 +8,6 @@ from models.venue import Venue
 
 @dataclass
 class Lineup(Performance):
-    """Show featuring a host and multiple stand-up acts."""
-
     host: str = ""
     acts: list[str] = field(default_factory=list)
 
@@ -51,6 +49,18 @@ class Lineup(Performance):
             raise ValueError(
                 f"Lineup with {len(self.acts)} acts requires at least {min_time} minutes, got {self.duration_minutes}."
             )
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "title": self.title,
+            "venue": self.venue,
+            "start": self.start.strftime(DATETIME_FORMAT),
+            "duration_minutes": self.duration_minutes,
+            "description": self.description,
+            "host": self.host,
+            "acts": list(self.acts),
+        }
 
     def to_view(
         self,
