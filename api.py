@@ -4,7 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from config import API_TITLE, DATE_FORMAT, STATIC_DIR
-from helpers import load_festival_aggregate
+from helpers import load_festival_aggregate, save_festival
+from schemas import WorkshopRegistrationRequest
 
 app = FastAPI(title=API_TITLE)
 
@@ -23,14 +24,14 @@ def read_festival() -> dict:
 @app.get("/api/venues")
 def list_venues() -> list[dict]:
     festival = load_festival_aggregate()
-    return [v.to_dict() for v in festival.venues_by_slug.values()]
+    return [v.to_view() for v in festival.venues_by_slug.values()]
 
 
 @app.get("/api/artists")
 def list_artists() -> list[dict]:
     festival = load_festival_aggregate()
     sorted_artists = sorted(festival.artists_by_slug.values(), key=lambda a: a.slug)
-    return [a.to_dict() for a in sorted_artists]
+    return [a.to_view() for a in sorted_artists]
 
 
 @app.get("/api/programme")
@@ -71,6 +72,22 @@ def read_performance(perf_id: str) -> dict:
     return perf.to_view(festival.venues_by_slug, festival.artists_by_slug)
 
 
+@app.post("/api/performances/{perf_id}/register")
+def register_for_workshop(perf_id: str, payload: WorkshopRegistrationRequest) -> dict:
+    festival = load_festival_aggregate()
+    try:
+        workshop = festival.register_workshop(perf_id, payload.name)
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail=str(err).strip("'\"")) from None
+    except TypeError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+
+    save_festival(festival)
+    return workshop.to_view(festival.venues_by_slug, festival.artists_by_slug)
+
+
 @app.get("/api/artists/{slug}")
 def read_artist(slug: str) -> dict:
     festival = load_festival_aggregate()
@@ -79,7 +96,7 @@ def read_artist(slug: str) -> dict:
     except ValueError as err:
         raise HTTPException(status_code=404, detail=str(err)) from None
 
-    result = artist.to_dict()
+    result = artist.to_view()
     result["performances"] = [
         p.to_view(festival.venues_by_slug, festival.artists_by_slug)
         for p, _ in schedule
