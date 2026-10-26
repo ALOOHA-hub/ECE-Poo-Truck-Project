@@ -171,7 +171,9 @@ def create_app(repo: BaseFestivalRepository | None = None) -> FastAPI:
     @app.post("/api/artists", status_code=201)
     def create_artist(payload: ArtistCreateRequest) -> dict[str, Any]:
         festival = repository.get_festival()
-        new_artist = Artist(name=payload.name, bio=payload.bio, photo_url=payload.photo_url)
+        new_artist = Artist(
+            name=payload.name, bio=payload.bio, photo_url=payload.photo_url
+        )
         festival.add_artist(new_artist)
         repository.save_festival(festival)
         return new_artist.to_view()

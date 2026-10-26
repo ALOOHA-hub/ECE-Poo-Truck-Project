@@ -7,7 +7,6 @@ from deauville.config import (
     DATETIME_FORMAT,
     FESTIVAL_DAY_OFFSET,
     PERFORMANCE_ID_FORMAT,
-    TIME_FORMAT,
     ArtistRole,
     PerformanceKind,
 )
@@ -45,7 +44,8 @@ class Performance(ABC):
         return (self.start, self.venue) < (other.start, other.venue)
 
     def __str__(self) -> str:
-        return f"{self.start:%H:%M}-{self.end:%H:%M} | {self.venue} | {self.title} ({self.kind.value})"
+        time_slot = f"{self.start:%H:%M}-{self.end:%H:%M}"
+        return f"{time_slot} | {self.venue} | {self.title} ({self.kind.value})"
 
     @abstractmethod
     def artists_involved(self) -> set[str]:

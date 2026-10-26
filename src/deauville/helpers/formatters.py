@@ -52,9 +52,8 @@ def format_programme(festival: dict, day_str: str) -> str:
         start = performance_start(perf)
         end = performance_end(perf)
         venue_name = venue_map.get(perf["venue"], perf["venue"])
-        lines.append(
-            f"{start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({perf['kind']})"
-        )
+        title_kind = f"{perf['title']} ({perf['kind']})"
+        lines.append(f"{start:%H:%M}-{end:%H:%M} | {venue_name} | {title_kind}")
     return "\n".join(lines)
 
 
@@ -94,8 +93,9 @@ def format_artist_schedule(festival: dict, artist_slug: str) -> str:
         day_date = performance_festival_day(perf)
         day_label = f"{day_date:%a} {day_date.day}"
         venue_name = venue_map.get(perf["venue"], perf["venue"])
+        time_slot = f"{start:%H:%M}-{end:%H:%M}"
         lines.append(
-            f"{day_label} {start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({role_str})"
+            f"{day_label} {time_slot} | {venue_name} | {perf['title']} ({role_str})"
         )
 
     return "\n".join(lines)
@@ -131,9 +131,8 @@ def format_now(festival: dict, moment_str: str) -> str:
             start = performance_start(perf)
             end = performance_end(perf)
             venue_name = venue_map.get(perf["venue"], perf["venue"])
-            lines.append(
-                f"- {start:%H:%M}-{end:%H:%M} | {venue_name} | {perf['title']} ({perf['kind']})"
-            )
+            title_kind = f"{perf['title']} ({perf['kind']})"
+            lines.append(f"- {start:%H:%M}-{end:%H:%M} | {venue_name} | {title_kind}")
 
     return "\n".join(lines)
 

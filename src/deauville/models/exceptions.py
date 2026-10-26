@@ -10,7 +10,7 @@ class NotFoundError(FestivalError, KeyError, ValueError):
 
 
 class ConflictError(FestivalError, ValueError):
-    """Raised when an operation violates schedule, venue, or artist availability (maps to HTTP 409)."""
+    """Raised when an operation violates schedule or artist availability (409)."""
 
 
 class ValidationError(FestivalError, ValueError):
@@ -18,4 +18,4 @@ class ValidationError(FestivalError, ValueError):
 
 
 class InvalidPerformanceTypeError(ValidationError, TypeError):
-    """Raised when an operation is executed on an incompatible performance kind (maps to HTTP 400)."""
+    """Raised when an operation targets an incompatible performance kind (400)."""

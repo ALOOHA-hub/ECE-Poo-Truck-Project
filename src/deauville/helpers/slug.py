@@ -2,7 +2,7 @@ import unicodedata
 
 
 def slugify(text: str) -> str:
-    """Normalize unicode, strip accents, and convert non-alphanumeric chars to hyphens."""
+    """Normalize unicode, strip accents, and convert non-alphanumeric chars."""
     decomposed = unicodedata.normalize("NFKD", text)
     plain = decomposed.encode("ascii", "ignore").decode("ascii")
     result = ""

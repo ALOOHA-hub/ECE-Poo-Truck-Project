@@ -1,9 +1,9 @@
 """Storage abstractions and implementations for festival data persistence."""
 
+import json
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from datetime import date, datetime
-import json
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,9 @@ class BaseFestivalRepository(ABC):
         ]
 
         artists = [
-            Artist(name=a["name"], bio=a.get("bio", ""), photo_url=a.get("photo_url", ""))
+            Artist(
+                name=a["name"], bio=a.get("bio", ""), photo_url=a.get("photo_url", "")
+            )
             for a in raw.get("artists", [])
         ]
 
@@ -103,12 +105,14 @@ class JsonFestivalRepository(BaseFestivalRepository):
 
     def load_raw(self) -> dict[str, Any]:
         try:
-            with open(self.data_path, "r", encoding="utf-8") as file:
+            with open(self.data_path, encoding="utf-8") as file:
                 return json.load(file)
         except FileNotFoundError:
             raise NotFoundError(f"Data file '{self.data_path}' not found.") from None
         except json.JSONDecodeError as err:
-            raise ValidationError(f"{self.data_path} is damaged (line {err.lineno}).") from None
+            raise ValidationError(
+                f"{self.data_path} is damaged (line {err.lineno})."
+            ) from None
 
     def save_raw(self, payload: dict[str, Any]) -> None:
         self.data_path.parent.mkdir(parents=True, exist_ok=True)

@@ -2,7 +2,15 @@ from datetime import date, datetime
 
 import pytest
 
-from deauville.models import Artist, Festival, Lineup, Performance, SoloShow, Venue, Workshop
+from deauville.models import (
+    Artist,
+    Festival,
+    Lineup,
+    Performance,
+    SoloShow,
+    Venue,
+    Workshop,
+)
 
 
 @pytest.fixture
@@ -49,7 +57,9 @@ def test_venue_busy_conflict(festival: Festival):
     overlapping = SoloShow(
         title="Conflict Show",
         venue="grand-casino",
-        start=datetime(2027, 6, 11, 21, 15),  # 21:15 is inside the 30m buffer after 21:00
+        start=datetime(
+            2027, 6, 11, 21, 15
+        ),  # 21:15 is inside the 30m buffer after 21:00
         duration_minutes=45,
         artist="max-pellerin",
     )
@@ -58,7 +68,7 @@ def test_venue_busy_conflict(festival: Festival):
 
 
 def test_artist_busy_in_another_venue(festival: Festival):
-    """Refuse scheduling an artist if they are already on another stage within buffer."""
+    """Refuse scheduling an artist already on another stage within buffer."""
     artist_conflict = SoloShow(
         title="Different Venue Same Artist",
         venue="le-kiosque",

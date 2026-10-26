@@ -1,6 +1,7 @@
 """HTTP API contract verification suite (E12)."""
 
 from datetime import date, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -136,7 +137,12 @@ def test_workshop_registration_contract(client: TestClient):
     ws_id = "le-kiosque-2027-06-12-1000"
 
     # 1. Successful registration
-    assert client.post(f"/api/performances/{ws_id}/register", json={"name": "Bob"}).status_code == 201
+    assert (
+        client.post(
+            f"/api/performances/{ws_id}/register", json={"name": "Bob"}
+        ).status_code
+        == 201
+    )
 
     # 2. Duplicate registration -> 409
     res_dup = client.post(f"/api/performances/{ws_id}/register", json={"name": "Bob"})
@@ -144,11 +150,15 @@ def test_workshop_registration_contract(client: TestClient):
     assert "already registered" in res_dup.json()["detail"]
 
     # 3. Full workshop -> 409
-    res_full = client.post(f"/api/performances/{ws_id}/register", json={"name": "Charlie"})
+    res_full = client.post(
+        f"/api/performances/{ws_id}/register", json={"name": "Charlie"}
+    )
     assert res_full.status_code == 409
     assert "Workshop is full" in res_full.json()["detail"]
 
     # 4. Wrong kind -> 400
-    res_bad = client.post("/api/performances/grand-casino-2027-06-11-2000/register", json={"name": "Bob"})
+    res_bad = client.post(
+        "/api/performances/grand-casino-2027-06-11-2000/register", json={"name": "Bob"}
+    )
     assert res_bad.status_code == 400
     assert "is not a workshop" in res_bad.json()["detail"]

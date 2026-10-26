@@ -1,6 +1,6 @@
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from deauville.cli.handlers import (
     handle_add,
@@ -39,24 +39,34 @@ def build_parser() -> argparse.ArgumentParser:
     prog_parser.add_argument("day", help="Target date in YYYY-MM-DD format.")
 
     # artist <slug>
-    artist_parser = subparsers.add_parser("artist", help="Show an artist's festival schedule.")
+    artist_parser = subparsers.add_parser(
+        "artist", help="Show an artist's festival schedule."
+    )
     artist_parser.add_argument("slug", help="Artist unique slug identifier.")
 
     # now <moment>
-    now_parser = subparsers.add_parser("now", help="Show currently running and upcoming performances.")
+    now_parser = subparsers.add_parser(
+        "now", help="Show currently running and upcoming performances."
+    )
     now_parser.add_argument("moment", help="ISO datetime timestamp (YYYY-MM-DDTHH:MM).")
 
     # add
     subparsers.add_parser("add", help="Interactively schedule a new solo performance.")
 
     # cancel <id>
-    cancel_parser = subparsers.add_parser("cancel", help="Cancel a scheduled performance by its unique ID.")
+    cancel_parser = subparsers.add_parser(
+        "cancel", help="Cancel a scheduled performance by its unique ID."
+    )
     cancel_parser.add_argument("id", help="Performance ID (<venue>-<YYYY-MM-DD-HHMM>).")
 
     # serve
     serve_parser = subparsers.add_parser("serve", help="Launch the web API server.")
-    serve_parser.add_argument("--host", default=DEFAULT_SERVER_HOST, help="Host to bind to.")
-    serve_parser.add_argument("--port", type=int, default=DEFAULT_SERVER_PORT, help="Port to bind to.")
+    serve_parser.add_argument(
+        "--host", default=DEFAULT_SERVER_HOST, help="Host to bind to."
+    )
+    serve_parser.add_argument(
+        "--port", type=int, default=DEFAULT_SERVER_PORT, help="Port to bind to."
+    )
 
     return parser
 

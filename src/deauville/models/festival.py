@@ -87,13 +87,19 @@ class Festival:
             if artist_slug not in self._artists:
                 raise ValidationError(f"Unknown artist '{artist_slug}'.")
 
-        if not (MIN_DURATION_MINUTES <= performance.duration_minutes <= MAX_DURATION_MINUTES):
+        if not (
+            MIN_DURATION_MINUTES <= performance.duration_minutes <= MAX_DURATION_MINUTES
+        ):
+            dur = performance.duration_minutes
             raise ValidationError(
-                f"Duration must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes, got {performance.duration_minutes}."
+                f"Duration must be between {MIN_DURATION_MINUTES} "
+                f"and {MAX_DURATION_MINUTES} minutes, got {dur}."
             )
 
         if not (self.first_day <= performance.festival_day <= self.last_day):
-            raise ValidationError(f"{performance.festival_day} is not a day of the festival.")
+            raise ValidationError(
+                f"{performance.festival_day} is not a day of the festival."
+            )
 
         performance.validate_specific_rules(venue_obj)
 
@@ -124,7 +130,9 @@ class Festival:
                 artist_name = self._artists[artist_slug].name
                 raise ConflictError(f"{artist_name} is on stage in {other.title}.")
 
-    def add_performance(self, performance: Performance, enforce_rules: bool = True) -> None:
+    def add_performance(
+        self, performance: Performance, enforce_rules: bool = True
+    ) -> None:
         """Append a valid performance to the schedule."""
         if enforce_rules:
             self.validate_new_performance(performance)
@@ -137,8 +145,10 @@ class Festival:
                 return self._performances.pop(idx)
         raise NotFoundError(f"No performance '{performance_id}'.")
 
-    def update_performance(self, performance_id: str, new_perf: Performance) -> Performance:
-        """Atomically update a performance. If validation fails, original remains untouched."""
+    def update_performance(
+        self, performance_id: str, new_perf: Performance
+    ) -> Performance:
+        """Atomically update a performance without leaving invalid state."""
         original_idx = None
         for idx, p in enumerate(self._performances):
             if p.id == performance_id:
@@ -163,7 +173,9 @@ class Festival:
         if not perf:
             raise NotFoundError(f"No performance '{performance_id}'.")
         if not isinstance(perf, Workshop):
-            raise InvalidPerformanceTypeError(f"Performance '{performance_id}' is not a workshop.")
+            raise InvalidPerformanceTypeError(
+                f"Performance '{performance_id}' is not a workshop."
+            )
 
         venue = self._venues.get(perf.venue)
         if not venue:
@@ -188,7 +200,9 @@ class Festival:
 
         return sorted(matching)
 
-    def artist_schedule(self, artist_slug: str) -> tuple[Artist, list[tuple[Performance, ArtistRole]]]:
+    def artist_schedule(
+        self, artist_slug: str
+    ) -> tuple[Artist, list[tuple[Performance, ArtistRole]]]:
         if artist_slug not in self._artists:
             raise NotFoundError(f"No artist '{artist_slug}'.")
 

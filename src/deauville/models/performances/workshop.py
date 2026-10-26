@@ -26,7 +26,8 @@ class Workshop(Performance):
     def get_summary(self, artists_by_slug: dict[str, Artist]) -> str:
         teacher_obj = artists_by_slug.get(self.teacher)
         teacher_name = teacher_obj.name if teacher_obj else self.teacher
-        return f"with {teacher_name}, {len(self.participants)}/{self.max_participants} places taken"
+        taken = f"{len(self.participants)}/{self.max_participants} places taken"
+        return f"with {teacher_name}, {taken}"
 
     def effective_capacity(self, venue: Venue) -> int:
         return min(self.max_participants, venue.capacity)
@@ -39,7 +40,9 @@ class Workshop(Performance):
         if not clean_name:
             raise ValidationError("Participant name cannot be empty.")
         if clean_name in self.participants:
-            raise ConflictError(f"'{clean_name}' is already registered for this workshop.")
+            raise ConflictError(
+                f"'{clean_name}' is already registered for this workshop."
+            )
         if self.places_left(venue) <= 0:
             raise ConflictError("Workshop is full.")
         self.participants.append(clean_name)
@@ -47,7 +50,9 @@ class Workshop(Performance):
     def unregister(self, participant_name: str) -> None:
         clean_name = participant_name.strip()
         if clean_name not in self.participants:
-            raise ValidationError(f"'{clean_name}' is not registered for this workshop.")
+            raise ValidationError(
+                f"'{clean_name}' is not registered for this workshop."
+            )
         self.participants.remove(clean_name)
 
     def validate_specific_rules(self, venue: Venue) -> None:

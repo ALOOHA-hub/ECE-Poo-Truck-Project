@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from deauville.api import app
 from deauville.models import Artist, Festival, SoloShow, Venue, Workshop

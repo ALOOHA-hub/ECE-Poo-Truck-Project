@@ -1,4 +1,3 @@
-import sys
 import uvicorn
 
 from deauville.config import DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT
@@ -75,5 +74,7 @@ def handle_cancel(repo: FestivalRepository, perf_id: str) -> None:
     print(f"Cancelled: {cancelled.title}")
 
 
-def handle_serve(host: str = DEFAULT_SERVER_HOST, port: int = DEFAULT_SERVER_PORT) -> None:
+def handle_serve(
+    host: str = DEFAULT_SERVER_HOST, port: int = DEFAULT_SERVER_PORT
+) -> None:
     uvicorn.run("api:app", host=host, port=port, reload=True)

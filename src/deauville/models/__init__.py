@@ -6,9 +6,9 @@ from deauville.models.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from deauville.models.festival import Festival
 from deauville.models.performances import Lineup, Performance, SoloShow, Workshop
 from deauville.models.venue import Venue
-from deauville.models.festival import Festival
 
 __all__ = [
     "Venue",

@@ -46,7 +46,8 @@ def validate_performance(festival: dict, new_perf: dict) -> None:
     duration = new_perf["duration_minutes"]
     if not (MIN_DURATION_MINUTES <= duration <= MAX_DURATION_MINUTES):
         raise ValueError(
-            f"Duration must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes, got {duration}."
+            f"Duration must be between {MIN_DURATION_MINUTES} "
+            f"and {MAX_DURATION_MINUTES} minutes, got {duration}."
         )
 
     # 3. Festival day bounds

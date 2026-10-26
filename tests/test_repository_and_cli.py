@@ -1,10 +1,9 @@
-import json
 from pathlib import Path
+
 import pytest
 
 from deauville.cli.parser import build_parser, run_cli
 from deauville.config import DEFAULT_DATA_PATH
-from deauville.models import SoloShow
 from deauville.repositories import FestivalRepository
 
 
@@ -12,7 +11,7 @@ from deauville.repositories import FestivalRepository
 def temp_festival_file(tmp_path: Path) -> Path:
     """Create an isolated temporary copy of festival.json for test mutation."""
     dest = tmp_path / "test_fest.json"
-    with open(DEFAULT_DATA_PATH, "r", encoding="utf-8") as src:
+    with open(DEFAULT_DATA_PATH, encoding="utf-8") as src:
         content = src.read()
     dest.write_text(content, encoding="utf-8")
     return dest
@@ -87,6 +86,7 @@ def test_cli_run_venues(capsys: pytest.CaptureFixture):
     captured = capsys.readouterr().out
     assert "grand-casino: Grand Casino, 650 seats" in captured
     assert "Total: 1130 seats" in captured
+
 
 def test_cli_run_programme_with_time_cutoff(capsys: pytest.CaptureFixture):
     run_cli(["programme", "2027-06-11"])

@@ -39,7 +39,9 @@ class Lineup(Performance):
 
     def validate_specific_rules(self, venue: Venue) -> None:
         if len(self.acts) < 2:
-            raise ValidationError(f"A lineup needs at least 2 acts, got {len(self.acts)}.")
+            raise ValidationError(
+                f"A lineup needs at least 2 acts, got {len(self.acts)}."
+            )
         if len(self.acts) != len(set(self.acts)):
             raise ValidationError("A lineup cannot have duplicate acts.")
         if self.host in self.acts:
@@ -48,7 +50,8 @@ class Lineup(Performance):
         min_time = len(self.acts) * 10 + (len(self.acts) - 1) * 3
         if self.duration_minutes < min_time:
             raise ValidationError(
-                f"Lineup with {len(self.acts)} acts requires at least {min_time} minutes, got {self.duration_minutes}."
+                f"Lineup with {len(self.acts)} acts requires at least "
+                f"{min_time} minutes, got {self.duration_minutes}."
             )
 
     def to_dict(self) -> dict:
