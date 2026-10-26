@@ -10,7 +10,7 @@ from deauville.helpers.formatters import (
 )
 from deauville.helpers.time import parse_datetime
 from deauville.models import SoloShow
-from deauville.repositories import FestivalRepository
+from deauville.repositories import BaseFestivalRepository, FestivalRepository
 
 
 def handle_summary(repo: FestivalRepository) -> None:
@@ -75,6 +75,14 @@ def handle_cancel(repo: FestivalRepository, perf_id: str) -> None:
 
 
 def handle_serve(
-    host: str = DEFAULT_SERVER_HOST, port: int = DEFAULT_SERVER_PORT
+    host: str = DEFAULT_SERVER_HOST,
+    port: int = DEFAULT_SERVER_PORT,
+    repo: BaseFestivalRepository | None = None,
 ) -> None:
-    uvicorn.run("api:app", host=host, port=port, reload=True)
+    if repo is not None:
+        from deauville.api import create_app
+
+        app = create_app(repo)
+        uvicorn.run(app, host=host, port=port)
+    else:
+        uvicorn.run("deauville.api:app", host=host, port=port, reload=True)

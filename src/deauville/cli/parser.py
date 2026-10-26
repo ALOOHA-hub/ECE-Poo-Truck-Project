@@ -13,7 +13,11 @@ from deauville.cli.handlers import (
     handle_venues,
 )
 from deauville.config import DEFAULT_DATA_PATH, DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT
-from deauville.repositories import FestivalRepository
+from deauville.repositories import (
+    BaseFestivalRepository,
+    FestivalRepository,
+    SqliteFestivalRepository,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -26,7 +30,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--data",
         type=Path,
         default=DEFAULT_DATA_PATH,
-        help="Path to the festival JSON dataset (defaults to data/festival.json).",
+        help="Path to the festival dataset (defaults to data/festival.json).",
+    )
+    parser.add_argument(
+        "--storage",
+        choices=["json", "sqlite"],
+        default="json",
+        help="Storage implementation engine (json or sqlite).",
     )
 
     subparsers = parser.add_subparsers(dest="subcommand", required=False)
@@ -75,7 +85,17 @@ def run_cli(args: list[str] | None = None) -> None:
     parser = build_parser()
     parsed = parser.parse_args(args)
 
-    repo = FestivalRepository(parsed.data)
+    repo: BaseFestivalRepository
+    data_str = str(parsed.data)
+    use_sqlite = parsed.storage == "sqlite" or data_str.endswith((".db", ".sqlite"))
+    if use_sqlite:
+        if data_str.endswith((".db", ".sqlite")):
+            db_path = parsed.data
+        else:
+            db_path = Path("data/festival.db")
+        repo = SqliteFestivalRepository(db_path)
+    else:
+        repo = FestivalRepository(parsed.data)
 
     try:
         if parsed.subcommand is None:
@@ -93,7 +113,7 @@ def run_cli(args: list[str] | None = None) -> None:
         elif parsed.subcommand == "cancel":
             handle_cancel(repo, parsed.id)
         elif parsed.subcommand == "serve":
-            handle_serve(host=parsed.host, port=parsed.port)
+            handle_serve(host=parsed.host, port=parsed.port, repo=repo)
     except (ValueError, KeyError) as err:
         print(f"Error: {err}")
         sys.exit(1)
