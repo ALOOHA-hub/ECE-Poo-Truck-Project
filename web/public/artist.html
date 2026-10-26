@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Artist Profile - Deauville Festival du Rire</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a href="/" class="brand">
+      <span class="brand-icon">🎭</span>
+      <span class="brand-title">Deauville Festival du Rire 2027</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/">&larr; Back to Festival</a>
+      <a href="/admin/" class="btn-admin">Admin Portal</a>
+    </nav>
+  </header>
+
+  <main>
+    <div id="artist-profile-container">
+      <div class="empty-state">Loading artist profile...</div>
+    </div>
+
+    <section id="artist-schedule-section" style="display: none;">
+      <h2 class="section-title">Festival Appearances</h2>
+      <div class="programme-grid" id="artist-shows-container">
+        <!-- Shows populated dynamically -->
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Deauville Festival du Rire &copy; 2027</p>
+  </footer>
+
+  <script>
+    async function loadArtist() {
+      const params = new URLSearchParams(window.location.search);
+      const slug = params.get("slug");
+      const container = document.getElementById("artist-profile-container");
+      const scheduleSection = document.getElementById("artist-schedule-section");
+      const showsContainer = document.getElementById("artist-shows-container");
+
+      if (!slug) {
+        container.innerHTML = `<div class="empty-state">No artist specified. <a href="/">Return home</a></div>`;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/artists/${encodeURIComponent(slug)}`);
+        if (!res.ok) {
+          container.innerHTML = `<div class="empty-state">Artist '${slug}' not found. <a href="/">Return home</a></div>`;
+          return;
+        }
+
+        const data = await res.json();
+        document.title = `${data.name} - Deauville Festival du Rire`;
+
+        container.innerHTML = `
+          <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 2rem; margin-bottom: 2rem;">
+            <h1 style="font-size: 2.2rem; margin-bottom: 0.5rem; color: #fff;">${data.name}</h1>
+            <p style="color: var(--accent-primary); font-size: 1rem; margin-bottom: 1rem;">Artist Slug: <code>${data.slug}</code></p>
+            <p style="color: var(--text-muted); font-size: 1.05rem; line-height: 1.7; max-width: 800px;">
+              ${data.bio || "No biography available for this artist."}
+            </p>
+          </div>
+        `;
+
+        if (!data.performances || data.performances.length === 0) {
+          scheduleSection.style.display = "block";
+          showsContainer.innerHTML = `<div class="empty-state">No scheduled performances for this artist.</div>`;
+          return;
+        }
+
+        scheduleSection.style.display = "block";
+        showsContainer.innerHTML = data.performances.map(item => {
+          const p = item.performance;
+          const role = item.role;
+          const startTime = p.start.substring(11, 16);
+          const endTime = p.end.substring(11, 16);
+          const dayDate = p.festival_day || p.start.substring(0, 10);
+
+          return `
+            <div class="perf-card">
+              <div>
+                <div class="perf-time-badge">
+                  <span class="perf-time">${dayDate} &bull; ${startTime}&ndash;${endTime}</span>
+                  <span class="kind-badge kind-${p.kind}">${role.toUpperCase()}</span>
+                </div>
+                <h3 class="perf-title">${p.title}</h3>
+                <div class="perf-venue">📍 ${p.venue_name || p.venue} (${p.duration_minutes} min)</div>
+                <p class="perf-summary">${p.summary || p.description}</p>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state">Error loading artist details.</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadArtist);
+  </script>
+</body>
+</html>

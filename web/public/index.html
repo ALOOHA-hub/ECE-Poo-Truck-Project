@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deauville Festival du Rire 2027</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a href="/" class="brand">
+      <span class="brand-icon">🎭</span>
+      <span class="brand-title" id="festival-title">Deauville Festival du Rire 2027</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#programme">Programme</a>
+      <a href="#artists">Artists</a>
+      <a href="/admin/" class="btn-admin">Admin Portal</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Live Status Section (Step 08) -->
+    <section class="live-status-card" id="live-section">
+      <div class="live-header">
+        <span class="pulse-dot"></span>
+        <span id="live-banner-title">On Stage Now</span>
+      </div>
+      <div class="live-grid">
+        <div class="live-column">
+          <h4>Playing Now</h4>
+          <div id="playing-now-list">Loading live performances...</div>
+        </div>
+        <div class="live-column">
+          <h4>Up Next</h4>
+          <div id="up-next-list">Loading upcoming performances...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Programme Schedule (Step 06 & Step 07) -->
+    <section id="programme">
+      <h2 class="section-title">Festival Programme</h2>
+
+      <div class="controls-bar">
+        <div class="day-tabs" id="day-tabs-container">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="venue-filter">
+          <label for="venue-select" style="display:none;">Filter by Venue</label>
+          <select id="venue-select">
+            <option value="">All Venues</option>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+      </div>
+
+      <div class="programme-grid" id="programme-container" style="margin-top: 1.5rem;">
+        <div class="empty-state">Loading schedule...</div>
+      </div>
+    </section>
+
+    <!-- Artists Grid (Step 06 & Step 07) -->
+    <section id="artists">
+      <h2 class="section-title">Featured Artists</h2>
+      <div class="artists-grid" id="artists-container">
+        <div class="empty-state">Loading artists...</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Deauville Festival du Rire &copy; 2027 &mdash; Built with Python, FastAPI, and Vanilla Web Technologies.</p>
+  </footer>
+
+  <script>
+    let festivalData = null;
+    let selectedDay = null;
+    let selectedVenue = "";
+
+    async function init() {
+      try {
+        // 1. Load Festival Info
+        const festRes = await fetch("/api/festival");
+        festivalData = await festRes.json();
+        document.getElementById("festival-title").textContent = festivalData.name;
+        selectedDay = festivalData.days[0] || "2027-06-10";
+
+        // 2. Load Venues
+        const venuesRes = await fetch("/api/venues");
+        const venues = await venuesRes.json();
+        const venueSelect = document.getElementById("venue-select");
+        venues.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v.slug;
+          opt.textContent = `${v.name} (${v.capacity} seats)`;
+          venueSelect.appendChild(opt);
+        });
+
+        venueSelect.addEventListener("change", (e) => {
+          selectedVenue = e.target.value;
+          loadProgramme();
+        });
+
+        // 3. Render Day Tabs
+        const dayContainer = document.getElementById("day-tabs-container");
+        festivalData.days.forEach(day => {
+          const btn = document.createElement("button");
+          btn.className = `day-tab ${day === selectedDay ? 'active' : ''}`;
+          const d = new Date(day + "T00:00:00");
+          btn.textContent = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+          btn.addEventListener("click", () => {
+            document.querySelectorAll(".day-tab").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            selectedDay = day;
+            loadProgramme();
+          });
+          dayContainer.appendChild(btn);
+        });
+
+        // 4. Initial Load
+        loadLiveStatus();
+        loadProgramme();
+        loadArtists();
+      } catch (err) {
+        console.error("Initialization error:", err);
+      }
+    }
+
+    async function loadLiveStatus() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const atParam = urlParams.get("at");
+        const apiUrl = atParam ? `/api/now?at=${encodeURIComponent(atParam)}` : "/api/now";
+
+        const res = await fetch(apiUrl);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (atParam) {
+          document.getElementById("live-banner-title").textContent = `On Stage at ${atParam.replace('T', ' ')}`;
+        }
+
+        const nowList = document.getElementById("playing-now-list");
+        if (data.now_playing.length === 0) {
+          nowList.innerHTML = "<div class='live-item'><span>No performance on stage at this moment.</span></div>";
+        } else {
+          nowList.innerHTML = data.now_playing.map(p => `
+            <div class="live-item">
+              <strong>${p.title} (${p.kind})</strong>
+              <span>${p.venue_name} &bull; until ${p.end.substring(11, 16)}</span>
+            </div>
+          `).join("");
+        }
+
+        const upList = document.getElementById("up-next-list");
+        if (data.up_next.length === 0) {
+          upList.innerHTML = "<div class='live-item'><span>No more performances scheduled.</span></div>";
+        } else {
+          upList.innerHTML = data.up_next.map(p => `
+            <div class="live-item">
+              <strong>${p.title} (${p.kind})</strong>
+              <span>${p.venue_name} &bull; ${p.start.substring(11, 16)} &ndash; ${p.end.substring(11, 16)}</span>
+            </div>
+          `).join("");
+        }
+      } catch (err) {
+        console.error("Error loading live status:", err);
+      }
+    }
+
+    async function loadProgramme() {
+      const container = document.getElementById("programme-container");
+      container.innerHTML = "<div class='empty-state'>Loading schedule...</div>";
+
+      try {
+        let url = `/api/programme?day=${selectedDay}`;
+        if (selectedVenue) {
+          url += `&venue=${selectedVenue}`;
+        }
+
+        const res = await fetch(url);
+        if (!res.ok) {
+          container.innerHTML = `<div class='empty-state'>No performances found for this selection.</div>`;
+          return;
+        }
+
+        const perfs = await res.json();
+        if (perfs.length === 0) {
+          container.innerHTML = `<div class='empty-state'>No performances scheduled for this filter.</div>`;
+          return;
+        }
+
+        container.innerHTML = perfs.map(p => {
+          const startTime = p.start.substring(11, 16);
+          const endTime = p.end.substring(11, 16);
+          const artistLinks = (p.artists || []).map(a => 
+            `<a href="/artist.html?slug=${a.slug}" class="artist-tag">${a.name}</a>`
+          ).join("");
+
+          return `
+            <div class="perf-card">
+              <div>
+                <div class="perf-time-badge">
+                  <span class="perf-time">${startTime} &ndash; ${endTime}</span>
+                  <span class="kind-badge kind-${p.kind}">${p.kind}</span>
+                </div>
+                <h3 class="perf-title">${p.title}</h3>
+                <div class="perf-venue">📍 ${p.venue_name} (${p.duration_minutes} min)</div>
+                <p class="perf-summary">${p.summary || p.description}</p>
+              </div>
+              <div class="perf-footer">
+                <div class="artist-tag-list">${artistLinks}</div>
+                ${p.kind === 'workshop' ? `<span>${p.places_left ?? ''} places left</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join("");
+      } catch (err) {
+        container.innerHTML = `<div class='empty-state'>Failed to load programme.</div>`;
+      }
+    }
+
+    async function loadArtists() {
+      const container = document.getElementById("artists-container");
+      try {
+        const res = await fetch("/api/artists");
+        const artists = await res.json();
+
+        container.innerHTML = artists.map(a => `
+          <a href="/artist.html?slug=${a.slug}" class="artist-card">
+            <h4 class="artist-name">${a.name}</h4>
+            <p class="artist-bio">${a.bio || "Performing at Deauville Festival du Rire 2027."}</p>
+          </a>
+        `).join("");
+      } catch (err) {
+        container.innerHTML = `<div class='empty-state'>Failed to load artists.</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

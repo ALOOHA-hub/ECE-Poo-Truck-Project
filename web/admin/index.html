@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Portal - Deauville Festival du Rire 2027</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header>
+    <a href="/admin/" class="brand">
+      <span>🎭 Festival Admin</span>
+      <span class="badge">Staff</span>
+    </a>
+    <nav>
+      <a href="/">&larr; Return to Public Website</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div id="alert-box" class="alert-box"></div>
+
+    <div class="forms-grid">
+      <!-- Schedule Performance Panel -->
+      <section class="panel">
+        <h2>📅 Schedule a Performance</h2>
+        <form id="schedule-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="perf-kind">Performance Kind *</label>
+              <select id="perf-kind" required>
+                <option value="solo">Solo Show</option>
+                <option value="lineup">Lineup (Multi-Act)</option>
+                <option value="workshop">Interactive Workshop</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="perf-venue">Venue *</label>
+              <select id="perf-venue" required>
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="perf-title">Title *</label>
+            <input type="text" id="perf-title" placeholder="e.g. Morning Coffee" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="perf-start">Start Time *</label>
+              <input type="datetime-local" id="perf-start" required>
+            </div>
+            <div class="form-group">
+              <label for="perf-duration">Duration (Minutes, 1–360) *</label>
+              <input type="number" id="perf-duration" value="60" min="1" max="360" required>
+            </div>
+          </div>
+
+          <!-- Solo Specific Fields -->
+          <div id="solo-fields">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="solo-artist">Artist *</label>
+                <select id="solo-artist">
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="solo-min-age">Minimum Age</label>
+                <input type="number" id="solo-min-age" min="0" max="99" placeholder="Optional">
+              </div>
+            </div>
+          </div>
+
+          <!-- Lineup Specific Fields -->
+          <div id="lineup-fields" style="display: none;">
+            <div class="form-group">
+              <label for="lineup-host">Host Artist *</label>
+              <select id="lineup-host">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="lineup-acts">Participating Acts (Select Multiple) *</label>
+              <select id="lineup-acts" multiple style="height: 110px;">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Workshop Specific Fields -->
+          <div id="workshop-fields" style="display: none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="workshop-teacher">Teacher Artist *</label>
+                <select id="workshop-teacher">
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="workshop-max-participants">Max Participants *</label>
+                <input type="number" id="workshop-max-participants" value="15" min="1">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="perf-desc">Description</label>
+            <textarea id="perf-desc" rows="2" placeholder="Brief outline of the performance"></textarea>
+          </div>
+
+          <button type="submit" class="btn">Schedule Performance</button>
+        </form>
+      </section>
+
+      <!-- Add Artist Panel -->
+      <section class="panel">
+        <h2>🎙️ Register New Artist</h2>
+        <form id="artist-form">
+          <div class="form-group">
+            <label for="artist-name">Artist Full Name *</label>
+            <input type="text" id="artist-name" placeholder="e.g. Zoé Tanguy" required>
+          </div>
+          <div class="form-group">
+            <label for="artist-bio">Biography / Intro</label>
+            <textarea id="artist-bio" rows="4" placeholder="Artist background..."></textarea>
+          </div>
+          <button type="submit" class="btn btn-secondary">Add Artist</button>
+        </form>
+      </section>
+    </div>
+
+    <!-- Active Schedule Table -->
+    <section class="panel">
+      <h2>📋 Scheduled Performances</h2>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Venue</th>
+              <th>Type</th>
+              <th>Title</th>
+              <th>Involved Artists / Details</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="schedule-tbody">
+            <tr>
+              <td colspan="6" style="text-align:center; padding: 2rem;">Loading performances...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Edit / Reschedule Modal -->
+  <div id="edit-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Edit Performance</h3>
+        <button class="modal-close" id="close-edit-modal">&times;</button>
+      </div>
+      <form id="edit-form">
+        <input type="hidden" id="edit-perf-id">
+        <input type="hidden" id="edit-perf-kind">
+        
+        <div class="form-group">
+          <label for="edit-title">Title</label>
+          <input type="text" id="edit-title" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-venue">Venue</label>
+            <select id="edit-venue" required></select>
+          </div>
+          <div class="form-group">
+            <label for="edit-duration">Duration (min)</label>
+            <input type="number" id="edit-duration" min="1" max="360" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-start">Start Time</label>
+          <input type="datetime-local" id="edit-start" required>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-desc">Description</label>
+          <textarea id="edit-desc" rows="2"></textarea>
+        </div>
+
+        <button type="submit" class="btn">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Register Workshop Modal -->
+  <div id="register-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Register Workshop Participant</h3>
+        <button class="modal-close" id="close-reg-modal">&times;</button>
+      </div>
+      <form id="register-form">
+        <input type="hidden" id="reg-perf-id">
+        <div class="form-group">
+          <label id="reg-ws-label">Workshop Title</label>
+          <input type="text" id="reg-participant-name" placeholder="Participant Name" required>
+        </div>
+        <button type="submit" class="btn">Register</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let venuesCache = [];
+    let artistsCache = [];
+    let performancesCache = [];
+
+    function showAlert(msg, isError = false) {
+      const box = document.getElementById("alert-box");
+      box.textContent = msg;
+      box.className = `alert-box ${isError ? 'error' : 'success'}`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        box.style.display = "none";
+      }, 7000);
+    }
+
+    async function loadMeta() {
+      try {
+        const [vRes, aRes] = await Promise.all([
+          fetch("/api/venues"),
+          fetch("/api/artists")
+        ]);
+        venuesCache = await vRes.json();
+        artistsCache = await aRes.json();
+
+        populateDropdowns();
+        loadSchedule();
+      } catch (err) {
+        showAlert("Failed to load metadata: " + err, true);
+      }
+    }
+
+    function populateDropdowns() {
+      // Venues
+      const vSelects = [document.getElementById("perf-venue"), document.getElementById("edit-venue")];
+      vSelects.forEach(sel => {
+        sel.innerHTML = venuesCache.map(v => `<option value="${v.slug}">${v.name} (${v.capacity} seats)</option>`).join("");
+      });
+
+      // Artists
+      const soloSel = document.getElementById("solo-artist");
+      const hostSel = document.getElementById("lineup-host");
+      const actsSel = document.getElementById("lineup-acts");
+      const teacherSel = document.getElementById("workshop-teacher");
+
+      const artistOpts = artistsCache.map(a => `<option value="${a.slug}">${a.name}</option>`).join("");
+      soloSel.innerHTML = artistOpts;
+      hostSel.innerHTML = artistOpts;
+      actsSel.innerHTML = artistOpts;
+      teacherSel.innerHTML = artistOpts;
+    }
+
+    // Toggle performance kind specific inputs
+    document.getElementById("perf-kind").addEventListener("change", (e) => {
+      const val = e.target.value;
+      document.getElementById("solo-fields").style.display = val === "solo" ? "block" : "none";
+      document.getElementById("lineup-fields").style.display = val === "lineup" ? "block" : "none";
+      document.getElementById("workshop-fields").style.display = val === "workshop" ? "block" : "none";
+    });
+
+    // Schedule submission
+    document.getElementById("schedule-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const kind = document.getElementById("perf-kind").value;
+
+      const payload = {
+        kind: kind,
+        title: document.getElementById("perf-title").value.trim(),
+        venue: document.getElementById("perf-venue").value,
+        start: document.getElementById("perf-start").value,
+        duration_minutes: parseInt(document.getElementById("perf-duration").value, 10),
+        description: document.getElementById("perf-desc").value.trim()
+      };
+
+      if (kind === "solo") {
+        payload.artist = document.getElementById("solo-artist").value;
+        const minAge = document.getElementById("solo-min-age").value;
+        if (minAge) payload.min_age = parseInt(minAge, 10);
+      } else if (kind === "lineup") {
+        payload.host = document.getElementById("lineup-host").value;
+        const selectedActs = Array.from(document.getElementById("lineup-acts").selectedOptions).map(o => o.value);
+        payload.acts = selectedActs;
+      } else if (kind === "workshop") {
+        payload.teacher = document.getElementById("workshop-teacher").value;
+        payload.max_participants = parseInt(document.getElementById("workshop-max-participants").value, 10);
+      }
+
+      try {
+        const res = await fetch("/api/performances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const body = await res.json();
+        if (!res.ok) {
+          showAlert(body.detail || "Failed to schedule performance.", true);
+        } else {
+          showAlert(`Successfully scheduled: ${body.title} (${body.id})`);
+          document.getElementById("perf-title").value = "";
+          loadSchedule();
+        }
+      } catch (err) {
+        showAlert("Network error while scheduling.", true);
+      }
+    });
+
+    // Register artist submission
+    document.getElementById("artist-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById("artist-name").value.trim(),
+        bio: document.getElementById("artist-bio").value.trim()
+      };
+
+      try {
+        const res = await fetch("/api/artists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const body = await res.json();
+        if (!res.ok) {
+          showAlert(body.detail || "Failed to add artist.", true);
+        } else {
+          showAlert(`Artist created: ${body.name} (${body.slug})`);
+          document.getElementById("artist-name").value = "";
+          document.getElementById("artist-bio").value = "";
+          loadMeta();
+        }
+      } catch (err) {
+        showAlert("Network error adding artist.", true);
+      }
+    });
+
+    async function loadSchedule() {
+      try {
+        const res = await fetch("/api/programme");
+        performancesCache = await res.json();
+
+        const tbody = document.getElementById("schedule-tbody");
+        if (performancesCache.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem;">No scheduled performances.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = performancesCache.map(p => {
+          const startTime = p.start.replace("T", " ").substring(0, 16);
+          const endTime = p.end.substring(11, 16);
+          let detailStr = p.summary || p.description;
+          if (p.kind === "workshop") {
+            detailStr += ` &bull; ${p.places_left ?? 0} places left`;
+          }
+
+          return `
+            <tr>
+              <td><strong>${startTime}&ndash;${endTime}</strong></td>
+              <td>${p.venue_name}</td>
+              <td><span class="badge" style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; text-transform:uppercase; font-size: 0.75rem;">${p.kind}</span></td>
+              <td><strong>${p.title}</strong></td>
+              <td><small>${detailStr}</small></td>
+              <td>
+                <div class="actions-cell">
+                  <button class="btn btn-secondary btn-sm" onclick="openEdit('${p.id}')">Edit</button>
+                  ${p.kind === 'workshop' ? `<button class="btn btn-secondary btn-sm" onclick="openRegister('${p.id}', '${p.title}')">Register</button>` : ''}
+                  <button class="btn btn-danger btn-sm" onclick="cancelPerformance('${p.id}')">Cancel</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join("");
+      } catch (err) {
+        console.error("Error loading schedule:", err);
+      }
+    }
+
+    async function cancelPerformance(id) {
+      if (!confirm(`Are you sure you want to cancel '${id}'?`)) return;
+
+      try {
+        const res = await fetch(`/api/performances/${id}`, { method: "DELETE" });
+        if (res.status === 204) {
+          showAlert(`Performance '${id}' cancelled.`);
+          loadSchedule();
+        } else {
+          const body = await res.json();
+          showAlert(body.detail || "Error cancelling performance.", true);
+        }
+      } catch (err) {
+        showAlert("Network error cancelling performance.", true);
+      }
+    }
+
+    function openEdit(id) {
+      const p = performancesCache.find(x => x.id === id);
+      if (!p) return;
+
+      document.getElementById("edit-perf-id").value = p.id;
+      document.getElementById("edit-perf-kind").value = p.kind;
+      document.getElementById("edit-title").value = p.title;
+      document.getElementById("edit-venue").value = p.venue;
+      document.getElementById("edit-duration").value = p.duration_minutes;
+      document.getElementById("edit-start").value = p.start;
+      document.getElementById("edit-desc").value = p.description || "";
+
+      document.getElementById("edit-modal").classList.add("open");
+    }
+
+    document.getElementById("close-edit-modal").addEventListener("click", () => {
+      document.getElementById("edit-modal").classList.remove("open");
+    });
+
+    document.getElementById("edit-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = document.getElementById("edit-perf-id").value;
+      const original = performancesCache.find(x => x.id === id);
+      if (!original) return;
+
+      const payload = {
+        kind: original.kind,
+        title: document.getElementById("edit-title").value.trim(),
+        venue: document.getElementById("edit-venue").value,
+        start: document.getElementById("edit-start").value,
+        duration_minutes: parseInt(document.getElementById("edit-duration").value, 10),
+        description: document.getElementById("edit-desc").value.trim(),
+        artist: original.artist,
+        min_age: original.min_age,
+        host: original.host,
+        acts: original.acts,
+        teacher: original.teacher,
+        max_participants: original.max_participants
+      };
+
+      try {
+        const res = await fetch(`/api/performances/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const body = await res.json();
+        if (!res.ok) {
+          showAlert(body.detail || "Failed to update performance.", true);
+        } else {
+          showAlert(`Performance updated successfully! (${body.id})`);
+          document.getElementById("edit-modal").classList.remove("open");
+          loadSchedule();
+        }
+      } catch (err) {
+        showAlert("Network error during update.", true);
+      }
+    });
+
+    function openRegister(id, title) {
+      document.getElementById("reg-perf-id").value = id;
+      document.getElementById("reg-ws-label").textContent = `Participant for: ${title}`;
+      document.getElementById("reg-participant-name").value = "";
+      document.getElementById("register-modal").classList.add("open");
+    }
+
+    document.getElementById("close-reg-modal").addEventListener("click", () => {
+      document.getElementById("register-modal").classList.remove("open");
+    });
+
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = document.getElementById("reg-perf-id").value;
+      const name = document.getElementById("reg-participant-name").value.trim();
+
+      try {
+        const res = await fetch(`/api/performances/${id}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name })
+        });
+
+        const body = await res.json();
+        if (!res.ok) {
+          showAlert(body.detail || "Registration failed.", true);
+        } else {
+          showAlert(`'${name}' registered for workshop! (${body.places_left} places left)`);
+          document.getElementById("register-modal").classList.remove("open");
+          loadSchedule();
+        }
+      } catch (err) {
+        showAlert("Network error registering participant.", true);
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", loadMeta);
+  </script>
+</body>
+</html>
