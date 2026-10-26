@@ -3,8 +3,8 @@ from datetime import date, datetime
 from fastapi.testclient import TestClient
 import pytest
 
-from api import app
-from models import Artist, Festival, SoloShow, Venue, Workshop
+from deauville.api import app
+from deauville.models import Artist, Festival, SoloShow, Venue, Workshop
 
 
 @pytest.fixture

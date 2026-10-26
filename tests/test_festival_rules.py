@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from models import Artist, Festival, Lineup, Performance, SoloShow, Venue, Workshop
+from deauville.models import Artist, Festival, Lineup, Performance, SoloShow, Venue, Workshop
 
 
 @pytest.fixture

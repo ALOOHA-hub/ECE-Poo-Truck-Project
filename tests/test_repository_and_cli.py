@@ -2,10 +2,10 @@ import json
 from pathlib import Path
 import pytest
 
-from cli.parser import build_parser, run_cli
-from config import DEFAULT_DATA_PATH
-from models import SoloShow
-from repositories import FestivalRepository
+from deauville.cli.parser import build_parser, run_cli
+from deauville.config import DEFAULT_DATA_PATH
+from deauville.models import SoloShow
+from deauville.repositories import FestivalRepository
 
 
 @pytest.fixture

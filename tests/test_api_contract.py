@@ -4,9 +4,9 @@ from datetime import date, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from api import create_app
-from models import Artist, Festival, SoloShow, Venue, Workshop
-from repositories import MemoryFestivalRepository
+from deauville.api import create_app
+from deauville.models import Artist, Festival, SoloShow, Venue, Workshop
+from deauville.repositories import MemoryFestivalRepository
 
 
 @pytest.fixture

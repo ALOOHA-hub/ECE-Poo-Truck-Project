@@ -1,4 +1,4 @@
-from cli.parser import run_cli
+from deauville.cli.parser import run_cli
 
 
 def main() -> None:
